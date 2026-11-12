@@ -27,6 +27,8 @@ your shell and no npm packages are fetched.
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build --src <src.opu> --target <name> --out <dir> --optimize` | Runs `opuromc optimize <ir> -o <optimized-ir>` before every emitter, prints measured input/output byte sizes and falls back to the original IR with an explicit message if the compiler cannot optimize. Default builds are unchanged. |
+| `build --src <src.opu> --target <name> --out <dir> --minify` | Minifies the emitted `.js` files with the built-in safe minifier (comments and non-semantic whitespace only), removes unused generated assets, prints the measured before/after byte table and writes the measured baseline to `<out>/.opurom-size.json`. Works with every target including `full` and `wasm`, and composes with `--optimize`. |
+| `size <dir>` | Prints the measured before/after byte table and reduction percentage for a directory built with `--minify`. Every number comes from `fs.statSync` on the real files. |
 | `build --src <src.opu> --target full --out <dir>` | The whole full-stack chain in one command: compile → frontend (`web` + `native`) → generated server crate → SQL migrations → `shared/types.json`. Prints an artifact summary. |
 | `build --src <src.opu> --target wasm --out <dir>` | `opuromc target --target wasm` then `cargo build --release --target wasm32-unknown-unknown`. |
 | `serve --out <dir> [--port N]` | Runs the generated service (`OPR_PORT`, `OPR_DB`), waits for `GET /health`, streams the output, shuts down cleanly on `SIGINT`/`SIGTERM`. |
@@ -48,6 +50,8 @@ cli init tmp/demo
 cli check tmp/demo/src/main.opu
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-opt --optimize
+cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-min --minify
+cli size tmp/web-min
 cli build --src ../opurom-spec/counter.opu --target wechat --out tmp/wechat
 cli build --src ../opurom-spec/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-spec/counter.opu --out tmp/bench --full
@@ -218,6 +222,71 @@ never reports a silent optimized build. A build without `--optimize` uses exactl
 compile/lower path; a clean `HEAD` CLI and the default R3 CLI produced byte-identical
 `app.js`, `index.html` and `ir.json` artifacts.
 
+## `build --minify` and `size`: measured, safe minification
+
+```sh
+node bin/opurom.mjs build --src ../opurom-spec/counter.opu --target web --out tmp/web-min --minify
+node bin/opurom.mjs size tmp/web-min
+```
+
+`--minify` runs after the emitter (and after `--optimize`, if both are given) and does three
+things, in this order:
+
+1. **Removes unused generated assets.** The CLI asks the compiler for its own file list
+   (`opuromc targets`) and deletes only files that belong to *another* emitter's file list and
+   were not written by this build — for example a stale `app.json` / `index.js` left in the
+   output directory by an earlier `wechat` build. Every removed file is printed with its
+   measured size. Files that are not emitter assets (your own files, the `server/`, `shared/`
+   and `migrations/` chain outputs) are never touched.
+2. **Minifies the emitted `.js` files** with `lib/r6.mjs`, a small state-machine tokenizer.
+   It removes comments and collapses whitespace runs. **It never mangles identifiers, never
+   rewrites strings, template literals or regular expressions, and never renames anything.**
+   Every literal token is copied verbatim from the source, so a URL inside a string, a
+   template with `${...}` interpolation, or a regex containing `/` or quotes is preserved
+   byte for byte. Line breaks are preserved wherever the source had them, so automatic
+   semicolon insertion cannot change. Each minified file is checked with `node --check`
+   before the build continues; a file that fails the check aborts the build.
+3. **Records the measured baseline** in `<out>/.opurom-size.json` (the file sizes measured
+   before minification) and prints the measured before/after table.
+
+`opurom size <dir>` re-reads that baseline, re-measures the directory with `fs.statSync` and
+prints the same table. Numbers are never invented: every cell is a real file size.
+
+```
+OPUROM size (measured with fs.statSync; excludes target/, data/, dotfiles)
+dir: /tmp/opurom-r6-web.61do4P
+target: web
+| file | before | after | reduction |
+| --- | --- | --- | --- |
+| app.js | 1438 B | 1292 B | 10.2% |
+| index.html | 383 B | 383 B | 0.0% |
+| ir.json | 1411 B | 1411 B | 0.0% |
+| total | 3232 B | 3086 B | 4.5% |
+measured reduction: 4.5% (before 3232 B -> after 3086 B)
+removed unused generated assets: (none)
+minified js files: app.js
+files created after baseline: (none)
+Scope: comment/whitespace minification only — no bundler, no source maps, no Brotli/zstd, no dependency graph analysis.
+```
+
+Those numbers are from one real run of `counter.opu` on this machine; rerun the command for
+values on your machine. A build **without** `--minify` is byte-identical to a build with it:
+the flag is the only thing that changes the output.
+
+### Honest scope of `--minify`
+
+- **No bundler.** Files are minified in place; nothing is concatenated, tree-shaken or
+  deduplicated.
+- **No source maps.** Minified output has no `.map` file and no mapping back to the original.
+- **No Brotli, gzip or zstd.** The size report is raw file bytes on disk.
+- **No dependency graph analysis.** Only the emitter's own output is inspected; the CLI does
+  not know which of your files are actually imported and does not try to find out.
+- **No identifier mangling, no dead-code elimination, no expression rewriting.** The minifier
+  removes comments and non-semantic whitespace only.
+- **Removed-asset detection is emitter-scoped**, not import-graph based: a file is removed when
+  the compiler's own artifact list says it belongs to a different target than the one built.
+- **Bundling, source maps, Brotli/zstd and real dependency graph analysis are R7+ work.**
+
 ## Unit tests
 
 ```sh
@@ -233,7 +302,10 @@ orchestration plan, optimizer step, measured byte formatting, explicit fallback)
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
 (SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping), `lib/r4.mjs`
 (percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting,
-read-only `inspect`) and the e2e output parsers. `test/r3.test.mjs` also drives stub compilers,
+read-only `inspect`), `lib/r6.mjs` (minifier literal edge cases, `node --check` on every
+emitter's real output, golden web app behaviour in a DOM harness, measured size report math,
+unused asset removal, byte-identical default build) and the e2e output parsers.
+`test/r3.test.mjs` also drives stub compilers,
 two SSE clients and a real local `dev --sync` server; `test/r4.test.mjs` drives a stub renderer
 and compares IR bytes before/after `inspect`. They pass with **no sibling Rust repos present**.
 
@@ -247,24 +319,26 @@ check:
    `opurom-spec/counter.opuir.json`.
 3. Build `web`, `node --check` the generated `app.js`.
 4. Build `wechat`, `node --check` the generated `index.js`.
-5. Build `native` (including `cargo build --release`), run the binary with piped stdin,
+5. Build `web` with `--minify`, `node --check` the minified `app.js` and assert the measured
+   before/after sizes and the reduction percentage.
+6. Build `native` (including `cargo build --release`), run the binary with piped stdin,
    assert its output contains `state`.
-6. Run `opurom-render` on the golden IR, assert a stable `digest=` line across two runs
+7. Run `opurom-render` on the golden IR, assert a stable `digest=` line across two runs
    plus a numeric `dirty=` count.
-7. Run `opurom-platform`, assert 14 rows.
-8. **Full stack**: build a Todo `.opu` (the `opurom-examples/todo.opu` fixture when present,
+8. Run `opurom-platform`, assert 14 rows.
+9. **Full stack**: build a Todo `.opu` (the `opurom-examples/todo.opu` fixture when present,
    otherwise an inline fixture), start the generated service on a free port and assert
    `GET /health`, `POST /todos` → a created row, `GET /todos` containing that row,
    `GET /todos/:id`, `PUT` update, `DELETE`, a 404 for an unknown row, `GET /ssr` containing
    the app name, and the SQLite row. The server is stopped afterwards.
-9. **wasm**: build the `wasm32-unknown-unknown` crate, instantiate the `.wasm` with an empty
-   import object and assert `opu_version() == 1` (plus the tap/state round trip when the IR
-   has an incrementing button).
+10. **wasm**: build the `wasm32-unknown-unknown` crate, instantiate the `.wasm` with an empty
+    import object and assert `opu_version() == 1` (plus the tap/state round trip when the IR
+    has an incrementing button).
 
 If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), that check prints
 **SKIP** with the reason instead of a false pass. A build failure, a wrong IR, invalid
 generated JS, a failing API call or a missing binary is a real **FAIL** with a diagnostic.
-Check 5 needs `cargo` on `PATH` (or `$HOME/.cargo/bin`).
+Check 6 needs `cargo` on `PATH` (or `$HOME/.cargo/bin`).
 
 ## `dev`: HTTP + SSE hot reload, backend rebuild
 
@@ -401,36 +475,45 @@ frame-wide rect count, not an invented per-layer rect list. If the renderer is u
 `--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
 screen-reader integration.
 
-## Status (round 4)
+## Status (round 6)
 
 - **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
   (offline-forced for R4 tools), offline-first generated-service builds, `doctor`, `targets`,
-  `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`), `serve`, `migrate`,
-  `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend rebuild/restart + `--sync`
-  preview hub), `bench` (default shape and measured `--full` table), `profile` (measured
-  sequential software-raster frames with honest `n/a`), `inspect` (read-only layer/a11y trees),
-  `test` orchestration (incl. full-stack and wasm checks), README, own git repo, clean tree.
-- `node --test`: the dependency-free unit suite (48 tests: the original 43 plus 5 R4 tests)
+  `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`, opt-in `--minify`),
+  `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
+  rebuild/restart + `--sync` preview hub), `bench` (default shape and measured `--full` table),
+  `profile` (measured sequential software-raster frames with honest `n/a`), `inspect`
+  (read-only layer/a11y trees), `size` (measured before/after byte table), `test` orchestration
+  (incl. full-stack, wasm and minified-build checks), README, own git repo, clean tree.
+- `node --test`: the dependency-free unit suite (55 tests: the original 48 plus 7 R6 tests)
   passes with **no sibling Rust repo present**. It covers the new flags, exact measured
   formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client `dev --sync`
-  SSE server, percentile math, frame caps, layer formatting and an `inspect` byte comparison.
-- `node bin/opurom.mjs test`: 9 checks PASS at commit time — the 7 round-1 checks, the
+  SSE server, percentile math, frame caps, layer formatting, an `inspect` byte comparison, and
+  the R6 minifier (literal edge cases, `node --check` on every emitter's real output, golden
+  web app behaviour, measured size math, unused asset removal, byte-identical default build).
+- `node bin/opurom.mjs test`: 10 checks PASS at commit time — the 7 round-1 checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
-  DELETE, 404, SSR, persisted SQLite row) and the wasm check (build +
-  `WebAssembly.instantiate` + `opu_version() == 1`).
+  DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
+  `WebAssembly.instantiate` + `opu_version() == 1`) and the minified-build check
+  (`node --check` on the minified `app.js` plus the measured before/after sizes).
 - Verified by hand against the real toolchain: default `build` output was byte-identical to a
   clean `HEAD` CLI (identical `app.js`, `index.html` and `ir.json` checksums); `build
-  --optimize` printed measured `1411 B -> 1411 B` on `counter.opu`; `bench --full` measured six
-  steps and one `GET /health`, with the real numbers shown above; two `dev --sync` SSE clients
-  received snapshots and the same reload frame after a source change; `profile` ran real
-  renderer frames and printed MEASURED percentiles plus derived fps; `inspect` printed the
-  side-by-side trees from `opurom-render --a11y` without changing IR bytes. No number is invented.
+  --optimize` printed measured `1411 B -> 1411 B` on `counter.opu`; `build --minify` measured
+  `app.js 1438 B -> 1292 B` (`3232 B -> 3086 B` total, 4.5%) on `counter.opu` and removed the
+  stale `wechat` assets (`app.json`, `index.js`, `index.wxml`, `index.wxss`) left in the output
+  directory by an earlier build; `bench --full` measured six steps and one `GET /health`, with
+  the real numbers shown above; two `dev --sync` SSE clients received snapshots and the same
+  reload frame after a source change; `profile` ran real renderer frames and printed MEASURED
+  percentiles plus derived fps; `inspect` printed the side-by-side trees from
+  `opurom-render --a11y` without changing IR bytes. No number is invented.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
   with the reason instead of a false pass. Unavailable `bench --full` rows and `profile`
   measurements print `n/a (reason)`.
-- **Not implemented (R5+)**: Metal/Vulkan/ANGLE GPU backends, real OS-native window adapters,
+- **Not implemented (R7+)**: Metal/Vulkan/ANGLE GPU backends, real OS-native window adapters,
   screen-reader OS integration, real device-conformance/competitive fps benchmarks, a device
   matrix, TLS/auth/cloud deployment, a remote package marketplace and a debugger/profiler GUI.
+  For `--minify`: **no bundler, no source maps, no Brotli/zstd, no dependency graph analysis**
+  beyond the emitter's own output, and **no identifier mangling or dead-code elimination**.
   There is **no debugger/profiler GUI** in this CLI; the separate DAP subset server has no GUI
   client. There is **no multi-OS sync**: `dev --sync` is a dev preview hub for N browser clients,
   not device-conformance testing. `profile` measures this host's software raster only; `inspect`
@@ -453,8 +536,10 @@ lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart
 lib/bench.mjs         measured timings + artifact sizes + bench --full table
 lib/r4.mjs            measured profile + read-only layer/a11y inspect
+lib/r6.mjs            safe JS minifier, unused asset removal, measured size report
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
 test/fixtures/inspect.opuir.json  R4 inspector fixture
-test/*.test.mjs       node:test unit suite (48 tests)
+test/fixtures/r6/*.js.fixture     real emitter outputs (web, mini programs, wasm host)
+test/*.test.mjs       node:test unit suite (55 tests)
 ```

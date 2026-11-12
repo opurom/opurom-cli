@@ -11,6 +11,7 @@ import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
 import { inspect, profile } from '../lib/r4.mjs';
+import { sizeReport } from '../lib/r6.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -21,11 +22,12 @@ Commands:
   targets                         list the IR emitters
   init <dir>                      scaffold a new project
   check <src.opu>                 type-check a source file
-  build --src <src.opu> --target <name> --out <dir> [--optimize]
+  build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target full --out <dir>
                                   frontend + service crate + migrations + shared types
+  size <dir>                      measured before/after byte table of a build
   serve --out <dir> [--port N]    run the generated service (OPR_PORT/OPR_DB)
   migrate --src <src.opu> --out <dir>
                                   generate SQL migrations from the IR models
@@ -71,15 +73,22 @@ async function main(argv) {
       const { src, target, out } = requireFlags(flags, ['src', 'target', 'out']);
       validateBuildTarget(target);
       const optimize = flagEnabled(flags, 'optimize');
+      const minify = flagEnabled(flags, 'minify');
       if (target === 'full') {
-        buildFull({ src, out, optimize });
+        buildFull({ src, out, optimize, minify });
         return 0;
       }
       if (target === 'wasm') {
-        buildWasm({ src, out, optimize });
+        buildWasm({ src, out, optimize, minify });
         return 0;
       }
-      build({ src, target, out, optimize });
+      build({ src, target, out, optimize, minify });
+      return 0;
+    }
+    case 'size': {
+      const dir = positionals[1] ?? (typeof flags.out === 'string' ? flags.out : null);
+      if (!dir) throw new Error('usage: size <dir>');
+      sizeReport({ dir });
       return 0;
     }
     case 'serve': {
