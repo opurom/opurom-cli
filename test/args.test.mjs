@@ -21,6 +21,13 @@ test('parseArgs keeps a boolean flag before another flag', () => {
   assert.deepEqual(positionals, []);
 });
 
+test('parseArgs reads a negative number as a value, not as another flag', () => {
+  const { flags } = parseArgs(['profile', '--repeat', '-1']);
+  assert.equal(flags.repeat, '-1');
+  const strict = parseArgs(['profile', '--repeat', '--other']);
+  assert.equal(strict.flags.repeat, true);
+});
+
 test('requireFlags rejects missing and boolean-only values', () => {
   assert.deepEqual(requireFlags({ src: 'a.opu', target: 'web', out: 'dist' }, ['src', 'target', 'out']), {
     src: 'a.opu', target: 'web', out: 'dist',
