@@ -35,6 +35,8 @@ your shell and no npm packages are fetched.
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
 | `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
+| `profile --src <src.opu> [--frames N]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
+| `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 
 ```sh
@@ -49,6 +51,8 @@ cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-opt --opti
 cli build --src ../opurom-spec/counter.opu --target wechat --out tmp/wechat
 cli build --src ../opurom-spec/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-spec/counter.opu --out tmp/bench --full
+cli profile --src ../opurom-spec/counter.opu --frames 30
+cli inspect ../opurom-spec/counter.opuir.json
 # Long-running: cli dev --src tmp/demo/src/main.opu --sync --port 5178
 cli test
 ```
@@ -227,9 +231,11 @@ orchestration plan, optimizer step, measured byte formatting, explicit fallback)
 `lib/fullstack.mjs` (full-build plan, shared types, artifact summary, temp-path guard),
 `lib/service.mjs` (env/port/db handling, service binary discovery), `lib/bench.mjs`
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
-(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping) and the e2e
-output parsers. `test/r3.test.mjs` also drives stub compilers, two SSE clients and a real
-local `dev --sync` server. They pass with **no sibling Rust repos present**.
+(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping), `lib/r4.mjs`
+(percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting,
+read-only `inspect`) and the e2e output parsers. `test/r3.test.mjs` also drives stub compilers,
+two SSE clients and a real local `dev --sync` server; `test/r4.test.mjs` drives a stub renderer
+and compares IR bytes before/after `inspect`. They pass with **no sibling Rust repos present**.
 
 ## `test`: end-to-end checks
 
@@ -357,21 +363,57 @@ OPUROM bench --full (measured on this machine, this run)
 | service /health body | 1 | 45 B |
 ```
 
-Those values are from that run only; rerun the command for values on your machine. There are
-deliberately **no** fps, startup, throughput or competitor claims: no GPU backend and no
-device matrix exist yet.
+Those values are from that run only; rerun the command for values on your machine. `bench`
+deliberately makes **no** fps, startup, throughput or competitor claims. See `profile` below for
+measured sequential software-raster frame times and a derived fps for this host only; no GPU
+backend or device matrix exists yet.
 
-## Status (round 3)
+## `profile`: measured software-raster frames
 
-- **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds,
-  offline-first generated-service builds, `doctor`, `targets`, `init`, `check`, `build`
-  (emitter, `full`, `wasm`, opt-in `--optimize`), `serve`, `migrate`, `dev` (HTTP + SSE +
-  fs.watch + state-preserving reload + backend rebuild/restart + `--sync` preview hub), `bench`
-  (default shape and measured `--full` table), `test` orchestration (incl. full-stack and wasm
-  checks), README, own git repo, clean tree.
-- `node --test`: the dependency-free unit suite (43 tests) passes with **no sibling Rust repo
-  present**. It covers the new flags, exact measured formatting, optimizer success/fallback,
-  sync hub bookkeeping and a real two-client `dev --sync` SSE server.
+```sh
+node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --frames 30
+```
+
+The command compiles the `.opu` source once, then launches `opurom-render` once per requested
+frame at 800x600 and times each real process with `performance.now()`. It reports MEASURED
+p50/p95/min/max milliseconds and achieved fps computed as
+`frames / sum(measured frame times)`. Every frame is checked for renderer `digest=` / `dirty=`
+output and a non-empty PPM. `--frames` defaults to 30 and accepts 1..600; values outside that
+range fail with a clear error. If a tool or any frame is unavailable, every statistic prints
+`n/a (reason)` and the command exits nonzero. No number is invented.
+
+These are software-raster timings on this host, **NOT a device/competitor benchmark**. Each
+measurement includes process launch and PPM output. There is no GPU backend, no device matrix,
+no debugger/profiler GUI and no competitive claim.
+
+## `inspect`: read-only layer and a11y trees
+
+```sh
+node bin/opurom.mjs inspect ../opurom-spec/counter.opuir.json
+```
+
+`inspect` reads the IR as bytes, parses it without writing to it, and invokes
+`opurom-render --a11y` with PPM/a11y outputs in a temporary directory. It prints a deterministic
+pre-order layer tree (id, kind, renderer bounds and frame-wide dirty-rect status) beside the
+data-only a11y tree (id, role, label, bounds and hidden). The IR bytes are compared before and
+after; a change is reported as a read-only violation. The dirty status is the renderer's
+frame-wide rect count, not an invented per-layer rect list. If the renderer is unavailable or
+`--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
+screen-reader integration.
+
+## Status (round 4)
+
+- **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
+  (offline-forced for R4 tools), offline-first generated-service builds, `doctor`, `targets`,
+  `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`), `serve`, `migrate`,
+  `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend rebuild/restart + `--sync`
+  preview hub), `bench` (default shape and measured `--full` table), `profile` (measured
+  sequential software-raster frames with honest `n/a`), `inspect` (read-only layer/a11y trees),
+  `test` orchestration (incl. full-stack and wasm checks), README, own git repo, clean tree.
+- `node --test`: the dependency-free unit suite (48 tests: the original 43 plus 5 R4 tests)
+  passes with **no sibling Rust repo present**. It covers the new flags, exact measured
+  formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client `dev --sync`
+  SSE server, percentile math, frame caps, layer formatting and an `inspect` byte comparison.
 - `node bin/opurom.mjs test`: 9 checks PASS at commit time — the 7 round-1 checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row) and the wasm check (build +
@@ -380,17 +422,19 @@ device matrix exist yet.
   clean `HEAD` CLI (identical `app.js`, `index.html` and `ir.json` checksums); `build
   --optimize` printed measured `1411 B -> 1411 B` on `counter.opu`; `bench --full` measured six
   steps and one `GET /health`, with the real numbers shown above; two `dev --sync` SSE clients
-  received snapshots and the same reload frame after a source change. No number is invented.
+  received snapshots and the same reload frame after a source change; `profile` ran real
+  renderer frames and printed MEASURED percentiles plus derived fps; `inspect` printed the
+  side-by-side trees from `opurom-render --a11y` without changing IR bytes. No number is invented.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
-  with the reason instead of a false pass. Unavailable `bench --full` rows print
-  `n/a (reason)`.
-- **Not implemented (R4+)**: Metal/Vulkan/ANGLE GPU backends, real OS-native window adapters,
-  PostgreSQL/MySQL, cloud deployment, TLS/auth, async/await in the language, a package
-  marketplace, a JetBrains IDE plugin, real fps/device benchmarks, a 100+ distinct primitive
-  renderer, connection pooling and streaming responses. There is **no debugger/profiler GUI** in
-  this CLI; the separate DAP subset server has no GUI client. There is **no multi-OS sync**:
-  `dev --sync` is a dev preview hub for N browser clients, not device-conformance testing or
-  real multi-device synchronization. No competitor claims are made.
+  with the reason instead of a false pass. Unavailable `bench --full` rows and `profile`
+  measurements print `n/a (reason)`.
+- **Not implemented (R5+)**: Metal/Vulkan/ANGLE GPU backends, real OS-native window adapters,
+  screen-reader OS integration, real device-conformance/competitive fps benchmarks, a device
+  matrix, TLS/auth/cloud deployment, a remote package marketplace and a debugger/profiler GUI.
+  There is **no debugger/profiler GUI** in this CLI; the separate DAP subset server has no GUI
+  client. There is **no multi-OS sync**: `dev --sync` is a dev preview hub for N browser clients,
+  not device-conformance testing. `profile` measures this host's software raster only; `inspect`
+  is data-only and read-only. No competitor claims are made.
 
 ## Layout
 
@@ -408,7 +452,9 @@ lib/service.mjs       generated-service env, offline-first build, spawn, health 
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart
 lib/bench.mjs         measured timings + artifact sizes + bench --full table
+lib/r4.mjs            measured profile + read-only layer/a11y inspect
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
-test/*.test.mjs       node:test unit suite (43 tests)
+test/fixtures/inspect.opuir.json  R4 inspector fixture
+test/*.test.mjs       node:test unit suite (48 tests)
 ```

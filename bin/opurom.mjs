@@ -10,6 +10,7 @@ import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
+import { inspect, profile } from '../lib/r4.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -32,6 +33,9 @@ Commands:
                                   serve web target with SSE hot reload (+ backend restart)
   bench --src <src.opu> [--out <dir>] [--full]
                                   measured compile/build times and artifact sizes
+  profile --src <src.opu> [--frames N]
+                                  measured software-raster frame timings (1..600)
+  inspect <ir.json>               read-only layer + a11y trees side by side
   test                            end-to-end golden pipeline checks
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
@@ -100,6 +104,15 @@ async function main(argv) {
       const out = typeof flags.out === 'string' ? flags.out : path.join('tmp', 'bench');
       await bench({ src, out, full: flagEnabled(flags, 'full') });
       return 0;
+    }
+    case 'profile': {
+      const { src } = requireFlags(flags, ['src']);
+      return profile({ src, frames: flags.frames });
+    }
+    case 'inspect': {
+      const ir = positionals[1];
+      if (!ir) throw new Error('usage: inspect <ir.json>');
+      return inspect({ ir });
     }
     case 'test':
       console.log('OPUROM end-to-end tests');

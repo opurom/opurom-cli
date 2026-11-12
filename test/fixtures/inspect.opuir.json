@@ -1,0 +1,28 @@
+{
+  "ir": "0.1",
+  "app": "InspectFixture",
+  "state": [],
+  "tree": {
+    "id": 0,
+    "kind": "Column",
+    "props": { "padding": 16 },
+    "children": [
+      {
+        "id": 1,
+        "kind": "Text",
+        "props": { "value": "Count: 0", "size": 24 },
+        "children": [],
+        "events": {}
+      },
+      {
+        "id": 2,
+        "kind": "Button",
+        "props": { "label": "+" },
+        "children": [],
+        "events": {}
+      }
+    ],
+    "events": {}
+  },
+  "theme": { "mode": "system", "accent": "#4F46E5", "radius": 12 }
+}
