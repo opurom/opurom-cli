@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  dbPathFor, DEFAULT_SERVICE_PORT, serviceEnv, serviceBinary, targetDir,
+  buildServer, dbPathFor, DEFAULT_SERVICE_PORT, serviceEnv, serviceBinary, targetDir,
 } from '../lib/service.mjs';
 import { serveUrl } from '../lib/serve.mjs';
 import { benchArtifactRows, formatMillis, markdownTable } from '../lib/bench.mjs';
@@ -50,4 +50,34 @@ test('bench helpers format measured values only', () => {
   assert.match(table, /\| compile \| 12 ms \|/);
   const rows = benchArtifactRows([{ name: 'web', files: 3, bytes: 2048 }]);
   assert.deepEqual(rows, [{ artifact: 'web', files: '3', bytes: '2.0 KiB' }]);
+});
+
+test('buildServer tries cached crates offline before a registry fallback', () => {
+  const dir = tmpDir('service-offline-');
+  const oldOffline = process.env.CARGO_NET_OFFLINE;
+  delete process.env.CARGO_NET_OFFLINE;
+  try {
+    fs.mkdirSync(path.join(dir, 'server'));
+    fs.writeFileSync(path.join(dir, 'server', 'Cargo.toml'), '[package]\nname = "opurom-service"\n');
+    const cargo = path.join(dir, 'cargo');
+    const logFile = path.join(dir, 'cargo.log');
+    fs.writeFileSync(cargo, `#!/bin/sh
+printf '%s\\n' "\${CARGO_NET_OFFLINE:-0}" >> '${logFile}'
+if [ "\${CARGO_NET_OFFLINE:-0}" = "true" ]; then
+  echo 'no matching package named serde_json found' >&2
+  exit 101
+fi
+mkdir -p "\${CARGO_TARGET_DIR}/release"
+printf '#!/bin/sh\\nexit 0\\n' > "\${CARGO_TARGET_DIR}/release/opurom-service"
+chmod +x "\${CARGO_TARGET_DIR}/release/opurom-service"
+exit 0
+`, { mode: 0o755 });
+    const bin = buildServer({ out: dir, cargo, log: () => {}, offline: true });
+    assert.equal(bin, path.join(dir, 'target', 'release', 'opurom-service'));
+    assert.deepEqual(fs.readFileSync(logFile, 'utf8').trim().split('\n'), ['true', '0']);
+  } finally {
+    if (oldOffline === undefined) delete process.env.CARGO_NET_OFFLINE;
+    else process.env.CARGO_NET_OFFLINE = oldOffline;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
