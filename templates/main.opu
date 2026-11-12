@@ -1,0 +1,12 @@
+// A minimal Opurom screen, based on opurom-examples/golden/counter.opu.
+app Counter {
+  state count = 0
+
+  Column(gap: 8, padding: 16, align: center) {
+    Text("Count: {count}", size: 24)
+    Row(gap: 8) {
+      Button("-") { count -= 1 }
+      Button("+") { count += 1 }
+    }
+  }
+}
