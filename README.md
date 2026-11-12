@@ -159,16 +159,17 @@ curl -s -o /dev/null -w '%{http_code}\n' $BASE/todos/1
 # 404
 
 curl -s $BASE/ssr | head -c 120
-# <!doctype html> ... TodoApp ...
+# <!DOCTYPE html> ... <title>TodoApp</title> ...
 ```
 
 ### 4. Verify the SQLite rows
 
-The service stores rows in the SQLite file the CLI pointed `OPR_DB` at.
+The service stores rows in the SQLite file the CLI pointed `OPR_DB` at. Run this **before**
+the `DELETE` above, or create a second row first — `DELETE` removes the row again.
 
 ```sh
 sqlite3 tmp/full/data/opurom.db 'select id, title, done from Todo;'
-# 1|write tests|1
+# 1|write tests|0
 ```
 
 or without the `sqlite3` binary, using the Node builtin driver:
@@ -290,16 +291,24 @@ throughput claims: no GPU backend and no device matrix exist yet.
   `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend rebuild/restart), `bench`
   (measured times and sizes), `test` orchestration (incl. the full-stack and wasm checks),
   README, own git repo, clean tree.
-- `node --test`: the dependency-free unit suite passes with **no sibling Rust repo present**.
-- `node bin/opurom.mjs test`: the round-1 checks stay green, plus the full-stack check
-  (real service on a free port: health, POST, GET list, GET one, PUT, DELETE, 404, SSR,
-  SQLite row) and the wasm check (build + `WebAssembly.instantiate` + `opu_version() == 1`).
+- `node --test`: the dependency-free unit suite (35 tests) passes with **no sibling Rust repo
+  present**.
+- `node bin/opurom.mjs test`: 9 checks PASS at commit time — the 7 round-1 checks, the
+  full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
+  DELETE, 404, SSR, persisted SQLite row) and the wasm check (build +
+  `WebAssembly.instantiate` + `opu_version() == 1`).
+- Verified by hand against the real toolchain: `build --target full` produces frontend,
+  service crate, migrations and `shared/types.json`; `serve` answers
+  `{"ok":true,"app":"TodoApp","version":"0.2.0"}` on `/health`, persists rows in
+  `<out>/data/opurom.db` and stops on `SIGINT`; `dev` restarts the backend on a source change
+  (`backend.restarts` grows in `/health`); `bench` prints measured times and sizes only.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
   with the reason instead of a false pass.
 - **Not implemented (R3+)**: TLS and authentication, cloud/container deployment recipes,
   multi-DB drivers (PostgreSQL/MySQL — only SQLite and the embedded KV store exist), a
-  debugger/profiler (DAP), multi-device sync, connection pooling, streaming responses and
-  real device benchmarks. The CLI does not advertise them.
+  debugger/profiler (DAP), multi-device sync, connection pooling (the generated service opens
+  one SQLite connection per request), streaming responses and real device benchmarks.
+  The CLI does not advertise them.
 
 ## Layout
 
@@ -307,7 +316,7 @@ throughput claims: no GPU backend and no device matrix exist yet.
 bin/opurom.mjs        dispatcher (shebang, executable)
 lib/args.mjs          parseArgs / requireFlags / parsePort
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
-lib/targets.mjs       8 emitters + spec parsing + target validation
+lib/targets.mjs       8 emitters + spec parsing + build-target validation
 lib/proc.mjs          spawnSync wrappers
 lib/doctor.mjs        toolchain report
 lib/init.mjs          scaffold
