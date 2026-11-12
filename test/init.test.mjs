@@ -2,12 +2,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { CLI_ROOT } from '../lib/paths.mjs';
+import { tmpDir } from '../lib/paths.mjs';
 import { init } from '../lib/init.mjs';
 
 test('init scaffolds a project and refuses to overwrite non-empty dirs', () => {
-  fs.mkdirSync(path.join(CLI_ROOT, 'tmp'), { recursive: true });
-  const base = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'init-test-'));
+  const base = tmpDir('init-test-');
   const project = path.join(base, 'demo');
   try {
     assert.equal(init(project), project);
