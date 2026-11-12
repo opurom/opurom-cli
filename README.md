@@ -1,8 +1,8 @@
 # opurom-cli
 
 The OPUROM toolchain CLI. Zero npm dependencies — **Node builtins only** (`node:fs`,
-`node:http`, `node:net`, `node:os`, `node:perf_hooks`, `node:child_process`, `node:sqlite`,
-`node:test`, `node:assert`). Run it directly:
+`node:http`, `node:net`, `node:crypto`, `node:os`, `node:perf_hooks`, `node:child_process`,
+`node:sqlite`, `node:test`, `node:assert`). Run it directly:
 
 ```sh
 node /Users/mac/work/opurom/opurom-cli/bin/opurom.mjs <command>
@@ -35,6 +35,7 @@ your shell and no npm packages are fetched.
 | `migrate --src <src.opu> --out <dir>` | Compiles the source and writes `migrations/001_create_<model>.sql` + `schema.sql` from the IR models. |
 | `dev --src <src.opu> [--port N]` | Serves the generated `web` output over HTTP with SSE hot reload **and** rebuilds/restarts the backend service when the source changes (details below). |
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
+| `dev --sync [--clients N] [--port N]` | One-shot R8 verification: N real RFC 6455 WebSocket clients (default 2, cap 8) connect over loopback TCP to an already running sync hub, dispatch one state event and report MEASURED per-client delivery times plus same-delta equality. A missed delta is FAIL; no hub is a documented SKIP with `n/a (reason)`. |
 | `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
@@ -62,6 +63,7 @@ cli profile --src ../opurom-spec/counter.opu --frames 30
 cli profile --src ../opurom-spec/counter.opu --repeat 10
 cli inspect ../opurom-spec/counter.opuir.json
 # Long-running: cli dev --src tmp/demo/src/main.opu --sync --port 5178
+# Start a hub first, then: cli dev --sync --clients 8 --port 5178
 cli test
 ```
 
@@ -310,12 +312,15 @@ read-only `inspect`), `lib/r6.mjs` (minifier literal edge cases, `node --check` 
 emitter's real output, golden web app behaviour in a DOM harness, measured size report math,
 unused asset removal, byte-identical default build), `lib/r7.mjs` (repeat-count validation,
 warmup-exclusion arithmetic, percentile math on known arrays, the environment description, the
-`profile --repeat` report, the compare byte-equality reporting and the unavailable-GPU path) and
+`profile --repeat` report, the compare byte-equality reporting and the unavailable-GPU path),
+`lib/r8.mjs` (RFC 6455 handshake and masked-frame vectors, cap validation, measured reports,
+real N-client same-delta verification, dropped-client FAIL, no-hub SKIP and socket cleanup) and
 the e2e output parsers.
 `test/r3.test.mjs` also drives stub compilers,
 two SSE clients and a real local `dev --sync` server; `test/r4.test.mjs` drives a stub renderer
 and compares IR bytes before/after `inspect`; `test/r7.test.mjs` drives stub compiler, renderer
-and GPU-backend binaries. They pass with **no sibling Rust repos present**.
+and GPU-backend binaries; `test/r8.test.mjs` starts a real loopback TCP WebSocket hub without
+the sibling Rust server. The 80 unit tests pass with **no sibling Rust repos present**.
 
 ## `test`: end-to-end checks
 
@@ -404,6 +409,50 @@ multi-OS synchronization and NOT a cloud deployment. There is no TLS, authentica
 device matrix; use it only on a trusted local network. `/health` reports a `sync` object
 with `mode`, `host`, `urls`, `clients`, `reloads` and `lastReload`, alongside the existing
 `clients` count.
+
+## `dev --sync --clients N`: measured WebSocket verification
+
+The R8 verifier is a one-shot command. It does **not** start a hub. Start the small in-repo
+loopback helper first, in another terminal:
+
+```sh
+node bin/sync-hub.mjs --port 5178
+# loopback sync hub: ws://127.0.0.1:5178/__opurom/sync
+```
+
+Then verify N clients against that hub:
+
+```sh
+node bin/opurom.mjs dev --sync --clients 8 --port 5178
+# or: node bin/opurom.mjs dev --sync           # N defaults to 2
+```
+
+`--clients N` accepts 1..8; 0, negative, fractional, non-numeric and >8 values fail with
+`invalid --clients: <value> (expected 1..8)` before any socket is opened. `--port N` (or
+`OPR_SYNC_PORT`) selects the loopback hub port; the default is 5178. `dev --sync --src ...`
+without `--clients` remains the existing long-running SSE preview hub.
+
+Each of the N clients opens a REAL `node:net` TCP connection to `127.0.0.1`, performs the
+RFC 6455 handshake (random `Sec-WebSocket-Key`, verified `Sec-WebSocket-Accept`), sends one
+masked text frame carrying the same canonical state event, answers hub ping frames with a
+masked pong, reads the hub's unmasked text-frame reply and closes the WebSocket cleanly. The
+hub broadcasts one canonical state delta after it has received all N state events. Delivery
+time is the measured `process.hrtime.bigint()` interval from each client's event write to its
+reply frame, printed as exact milliseconds per client. A timeout, close, missing reply or a
+different delta is a **FAIL** with a nonzero exit; no delivery time is invented for a client
+that missed the delta. If the TCP connection is refused, the command prints
+`sync: n/a (no sync hub at 127.0.0.1:<port>: <reason>)`, `status: SKIP` and exits 0.
+
+`bin/sync-hub.mjs` is a testable helper, not a production server. It uses the same bounded
+frame conventions as `opurom-server/src/websocket.rs`: RFC 6455 accept-key derivation,
+masked client frames, unmasked server frames, text/binary/continuation opcodes, control-frame
+checks, ping/pong, close and 1 MiB frame / 8 MiB message caps. It adds only the R8 broadcast
+rule. There are no extensions, no subprotocol negotiation, no TLS and no authentication.
+
+Honest scope: **loopback clients on one host, NOT real devices**. There is no visual diff,
+no network capture UI, no multi-OS or cross-host synchronization, no device conformance and
+no competitive timing claim. Real-device conformance, visual diffing and a network capture
+UI remain **R9+**.
 
 ## `bench`: measured numbers only
 
@@ -579,28 +628,27 @@ frame-wide rect count, not an invented per-layer rect list. If the renderer is u
 `--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
 screen-reader integration.
 
-## Status (round 7)
+## Status (round 8)
 
 - **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
   (offline-forced for R4 tools), offline-first generated-service builds, `doctor`, `targets`,
   `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`, opt-in `--minify`),
   `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
-  rebuild/restart + `--sync` preview hub), `bench` (default shape and measured `--full` table),
-  `bench --compare` (software vs GPU backend, both MEASURED, paired with the byte-equality
-  result), `profile` (measured sequential software-raster frames with honest `n/a`),
+  rebuild/restart + `--sync` preview hub), `dev --sync --clients N` (real N-client RFC 6455
+  loopback verification with measured delivery times), `bench` (default shape and measured
+  `--full` table), `bench --compare` (software vs GPU backend, both MEASURED, paired with the
+  byte-equality result), `profile` (measured sequential software-raster frames with honest `n/a`),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated),
   `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (70 tests: the original 48 plus 7 R6 tests plus
-  15 R7 tests) passes with **no sibling Rust repo present**. It covers the new flags, exact
-  measured formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
+- `node --test`: the dependency-free unit suite (80 tests: the original 70 plus 10 R8 tests)
+  passes with **no sibling Rust repo present**. It covers the new flags, exact measured
+  formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
   `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
-  comparison, the R6 minifier (literal edge cases, `node --check` on every emitter's real
-  output, golden web app behaviour, measured size math, unused asset removal, byte-identical
-  default build) and the R7 measurement layer (repeat-count validation, warmup-exclusion
-  arithmetic, the environment description, the compare byte-equality reporting and the
-  unavailable-GPU path).
+  comparison, the R6 minifier, the R7 measurement layer, and the R8 RFC 6455 vectors, cap
+  validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP and
+  real loopback socket cleanup.
 - `node bin/opurom.mjs test`: 10 checks PASS at commit time — the 7 round-1 checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
@@ -613,7 +661,9 @@ screen-reader integration.
   stale `wechat` assets (`app.json`, `index.js`, `index.wxml`, `index.wxss`) left in the output
   directory by an earlier build; `bench --full` measured six steps and one `GET /health`, with
   the real numbers shown above; two `dev --sync` SSE clients received snapshots and the same
-  reload frame after a source change; `profile` ran real renderer frames and printed MEASURED
+  reload frame after a source change; real N=2 and N=8 RFC 6455 loopback clients each received
+  the same state delta with MEASURED per-client `hrtime` delivery times and clean socket
+  shutdown; `profile` ran real renderer frames and printed MEASURED
   percentiles plus derived fps; `inspect` printed the side-by-side trees from
   `opurom-render --a11y` without changing IR bytes; `profile --repeat 10` ran ten real renderer
   runs, excluded two warmup runs and printed the measured statistics of the eight remaining
@@ -622,7 +672,7 @@ screen-reader integration.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
   with the reason instead of a false pass. Unavailable `bench --full` rows, `profile`,
   `profile --repeat` and `bench --compare` measurements print `n/a (reason)`.
-- **Honest scope of the R7 measurement work**: `profile --repeat` measures this host's software
+- **Honest scope of the R7/R8 work**: `profile --repeat` measures this host's software
   raster only and states the CPU, the OS release, the Node version and the raster kind; it
   cannot observe machine idleness from inside the CLI and does not claim it. `bench --compare`
   compares two **OPUROM** backends against each other only: **no competitor binary is executed
@@ -631,16 +681,21 @@ screen-reader integration.
   source maps, no Brotli/zstd, no dependency graph analysis** beyond the emitter's own output,
   and **no identifier mangling or dead-code elimination**. There is **no debugger/profiler GUI**
   in this CLI; the separate DAP subset server has no GUI client. There is **no multi-OS sync**:
-  `dev --sync` is a dev preview hub for N browser clients, not device-conformance testing.
-  `inspect` is data-only and read-only.
-- **Not implemented (R8+)**: Vulkan/ANGLE/D3D GPU backends, real OS-native window adapters,
-  screen-reader OS integration, real device-conformance/competitive fps benchmarks, a device
-  matrix, TLS/auth/cloud deployment, a remote package marketplace and a debugger/profiler GUI.
+  `dev --sync --src ...` is a dev preview hub for N browser clients, and
+  `dev --sync --clients N` verifies N loopback WebSocket clients on one host. Neither is
+  real-device conformance testing. R8 has **no visual diff and no network capture UI**;
+  those, real-device conformance and competitive benchmarks remain **R9+**. `inspect` is
+  data-only and read-only.
+- **Not implemented (R9+)**: real-device conformance, visual diff, network capture UI,
+  multi-OS/cross-host synchronization, a device matrix, TLS/auth/cloud deployment, competitive
+  benchmarks, a remote package marketplace and a debugger/profiler GUI. GPU effect kernels,
+  GPU presentation and Vulkan/ANGLE/D3D remain outside this CLI.
 
 ## Layout
 
 ```
 bin/opurom.mjs        dispatcher (shebang, executable)
+bin/sync-hub.mjs      standalone loopback RFC 6455 sync hub helper
 lib/args.mjs          parseArgs / requireFlags / parsePort / flagEnabled
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
 lib/targets.mjs       8 emitters + spec parsing + build-target validation
@@ -656,9 +711,11 @@ lib/bench.mjs         measured timings + artifact sizes + bench --full table
 lib/r4.mjs            measured profile + read-only layer/a11y inspect
 lib/r6.mjs            safe JS minifier, unused asset removal, measured size report
 lib/r7.mjs            profile --repeat stats + environment, bench --compare byte equality
+lib/r8.mjs            RFC 6455 codec + loopback hub + N-client sync verification
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
 test/fixtures/inspect.opuir.json  R4 inspector fixture
 test/fixtures/r6/*.js.fixture     real emitter outputs (web, mini programs, wasm host)
-test/*.test.mjs       node:test unit suite (70 tests)
+test/r8.test.mjs      real loopback WebSocket sync tests (10)
+test/*.test.mjs       node:test unit suite (80 tests)
 ```

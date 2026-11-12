@@ -13,6 +13,7 @@ import { bench } from '../lib/bench.mjs';
 import { inspect, profile } from '../lib/r4.mjs';
 import { sizeReport } from '../lib/r6.mjs';
 import { compareBackends, profileRepeat } from '../lib/r7.mjs';
+import { DEFAULT_SYNC_PORT, verifySync } from '../lib/r8.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -34,6 +35,8 @@ Commands:
                                   generate SQL migrations from the IR models
   dev --src <src.opu> [--port N] [--sync]
                                   serve web target with SSE hot reload (+ backend restart)
+  dev --sync [--clients N] [--port N]
+                                  verify N loopback WebSocket clients against a running sync hub
   bench --src <src.opu> [--out <dir>] [--full]
                                   measured compile/build times and artifact sizes
   bench --src <src.opu> --compare
@@ -108,9 +111,18 @@ async function main(argv) {
       return 0;
     }
     case 'dev': {
+      const sync = flagEnabled(flags, 'sync');
+      if (flags.clients !== undefined && !sync) throw new Error('usage: --clients requires --sync');
+      const port = parsePort(flags.port ?? process.env.OPR_SYNC_PORT, DEFAULT_SYNC_PORT);
+      const hasSource = flags.src !== undefined && flags.src !== true && flags.src !== '';
+      if (sync && flags.clients === undefined && flags.src !== undefined) {
+        requireFlags(flags, ['src']);
+      }
+      if (sync && (flags.clients !== undefined || !hasSource)) {
+        return (await verifySync({ port, clients: flags.clients })).code;
+      }
       const { src } = requireFlags(flags, ['src']);
-      const port = parsePort(flags.port);
-      await dev({ src, port, sync: flagEnabled(flags, 'sync') });
+      await dev({ src, port, sync });
       return 0; // the HTTP server keeps the process alive
     }
     case 'bench': {
