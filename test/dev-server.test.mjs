@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { CLI_ROOT } from '../lib/paths.mjs';
+import { tmpDir } from '../lib/paths.mjs';
 import { dev } from '../lib/dev.mjs';
 
 // Self-contained: a stub opuromc on PATH means no sibling Rust repo is needed.
@@ -18,8 +18,7 @@ esac
 `;
 
 test('dev server serves injected html, health, and an SSE reload on source change', { timeout: 20000 }, async () => {
-  fs.mkdirSync(path.join(CLI_ROOT, 'tmp'), { recursive: true });
-  const base = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'dev-test-'));
+  const base = tmpDir('dev-test-');
   const bin = path.join(base, 'bin');
   const src = path.join(base, 'main.opu');
   fs.mkdirSync(bin);

@@ -8,7 +8,7 @@ import {
   writeSharedTypes,
 } from '../lib/fullstack.mjs';
 import { BUILD_TARGETS, validateBuildTarget } from '../lib/targets.mjs';
-import { CLI_ROOT } from '../lib/paths.mjs';
+import { CLI_ROOT, tmpDir } from '../lib/paths.mjs';
 
 test('validateBuildTarget accepts emitters plus full and wasm', () => {
   assert.deepEqual([...BUILD_TARGETS].sort(), ['alipay', 'baidu', 'douyin', 'full', 'kuaishou', 'native', 'qq', 'wasm', 'web', 'wechat']);
@@ -62,7 +62,7 @@ test('typesFromIr keeps the IR models as the only type source', () => {
 });
 
 test('writeSharedTypes writes one JSON file both sides can read', () => {
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'shared-test-'));
+  const dir = tmpDir('shared-test-');
   try {
     const file = writeSharedTypes({ ir: '0.1', app: 'TodoApp', models: [{ name: 'Todo', fields: [] }], api: [] }, dir);
     assert.equal(file, path.join(dir, 'shared', 'types.json'));
@@ -75,7 +75,7 @@ test('writeSharedTypes writes one JSON file both sides can read', () => {
 });
 
 test('assertFullArtifacts names the missing pieces', () => {
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'assert-test-'));
+  const dir = tmpDir('assert-test-');
   try {
     assert.throws(() => assertFullArtifacts(dir), /full build incomplete/);
     fs.mkdirSync(path.join(dir, 'web'));
@@ -95,7 +95,7 @@ test('assertFullArtifacts names the missing pieces', () => {
 });
 
 test('artifact summary reports real file counts and byte sizes', () => {
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'stats-test-'));
+  const dir = tmpDir('stats-test-');
   try {
     fs.mkdirSync(path.join(dir, 'web'));
     fs.writeFileSync(path.join(dir, 'web', 'a.js'), 'x'.repeat(2048));
@@ -115,7 +115,7 @@ test('artifact summary reports real file counts and byte sizes', () => {
 test('removeTempDir refuses paths outside the CLI temp directory', () => {
   assert.throws(() => removeTempDir('/tmp'), /refusing to remove non-temp path/);
   assert.throws(() => removeTempDir(CLI_ROOT), /refusing to remove non-temp path/);
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'rm-test-'));
+  const dir = tmpDir('rm-test-');
   assert.equal(removeTempDir(dir), path.resolve(dir));
   assert.equal(fs.existsSync(dir), false);
 });
@@ -136,7 +136,7 @@ test('wasmTapNodeId finds the node that increments an int state', () => {
 });
 
 test('syncMigrationFiles puts the SQL next to the generated crate', () => {
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'sync-test-'));
+  const dir = tmpDir('sync-test-');
   try {
     fs.mkdirSync(path.join(dir, 'migrations'));
     fs.writeFileSync(path.join(dir, 'migrations', '001_create_todo.sql'), 'CREATE TABLE Todo(id INT);');

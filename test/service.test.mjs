@@ -7,7 +7,7 @@ import {
 } from '../lib/service.mjs';
 import { serveUrl } from '../lib/serve.mjs';
 import { benchArtifactRows, formatMillis, markdownTable } from '../lib/bench.mjs';
-import { CLI_ROOT } from '../lib/paths.mjs';
+import { CLI_ROOT, tmpDir } from '../lib/paths.mjs';
 
 test('serviceEnv sets only OPR_PORT and OPR_DB', () => {
   const env = serviceEnv({ port: 9000, db: '/tmp/x.db', base: { PATH: '/bin' } });
@@ -26,7 +26,7 @@ test('port and db paths are derived from the output directory', () => {
 });
 
 test('serviceBinary finds the built executable and reports null when absent', () => {
-  const dir = fs.mkdtempSync(path.join(CLI_ROOT, 'tmp', 'service-test-'));
+  const dir = tmpDir('service-test-');
   try {
     assert.equal(serviceBinary(dir), null);
     fs.mkdirSync(path.join(dir, 'server'));
