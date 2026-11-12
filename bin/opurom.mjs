@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { parseArgs, parsePort, requireFlags } from '../lib/args.mjs';
-import { build, check } from '../lib/build.mjs';
+import { build, buildFull, buildWasm, check, migrate } from '../lib/build.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
 import { init } from '../lib/init.mjs';
 import { specFile } from '../lib/paths.mjs';
-import { targetsFromSpec, validateTarget } from '../lib/targets.mjs';
+import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
+import { serve } from '../lib/serve.mjs';
+import { bench } from '../lib/bench.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -15,12 +17,20 @@ Usage: node bin/opurom.mjs <command> [options]
 
 Commands:
   doctor                          check rustc/cargo/node/opuromc/render
-  targets                         list the 8 IR emitters
+  targets                         list the IR emitters
   init <dir>                      scaffold a new project
   check <src.opu>                 type-check a source file
   build --src <src.opu> --target <name> --out <dir>
                                   compile IR and lower to a target
-  dev --src <src.opu> [--port N] serve web target with SSE hot reload
+                                  (name: emitter, "full" or "wasm")
+  build --src <src.opu> --target full --out <dir>
+                                  frontend + service crate + migrations + shared types
+  serve --out <dir> [--port N]    run the generated service (OPR_PORT/OPR_DB)
+  migrate --src <src.opu> --out <dir>
+                                  generate SQL migrations from the IR models
+  dev --src <src.opu> [--port N]  serve web target with SSE hot reload (+ backend restart)
+  bench --src <src.opu> [--out <dir>]
+                                  measured compile/build times and artifact sizes
   test                            end-to-end golden pipeline checks
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
@@ -54,8 +64,27 @@ async function main(argv) {
     }
     case 'build': {
       const { src, target, out } = requireFlags(flags, ['src', 'target', 'out']);
-      validateTarget(target);
+      validateBuildTarget(target);
+      if (target === 'full') {
+        buildFull({ src, out });
+        return 0;
+      }
+      if (target === 'wasm') {
+        buildWasm({ src, out });
+        return 0;
+      }
       build({ src, target, out });
+      return 0;
+    }
+    case 'serve': {
+      const { out } = requireFlags(flags, ['out']);
+      const port = parsePort(flags.port, 8787);
+      await serve({ out, port });
+      return 0; // the service keeps the process alive
+    }
+    case 'migrate': {
+      const { src, out } = requireFlags(flags, ['src', 'out']);
+      migrate({ src, out });
       return 0;
     }
     case 'dev': {
@@ -64,9 +93,15 @@ async function main(argv) {
       await dev({ src, port });
       return 0; // the HTTP server keeps the process alive
     }
+    case 'bench': {
+      const { src } = requireFlags(flags, ['src']);
+      const out = typeof flags.out === 'string' ? flags.out : path.join('tmp', 'bench');
+      await bench({ src, out });
+      return 0;
+    }
     case 'test':
       console.log('OPUROM end-to-end tests');
-      return runE2e().exitCode;
+      return (await runE2e()).exitCode;
     default:
       throw new Error(`unknown command: ${command}\n\n${USAGE}`);
   }
