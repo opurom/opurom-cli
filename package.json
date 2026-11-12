@@ -1,0 +1,17 @@
+{
+  "name": "opurom-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Zero-dependency Node CLI for the OPUROM framework",
+  "bin": {
+    "opurom": "bin/opurom.mjs"
+  },
+  "scripts": {
+    "test": "node --test",
+    "doctor": "node bin/opurom.mjs doctor"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
