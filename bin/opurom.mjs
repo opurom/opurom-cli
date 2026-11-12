@@ -12,6 +12,7 @@ import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
 import { inspect, profile } from '../lib/r4.mjs';
 import { sizeReport } from '../lib/r6.mjs';
+import { compareBackends, profileRepeat } from '../lib/r7.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -35,8 +36,12 @@ Commands:
                                   serve web target with SSE hot reload (+ backend restart)
   bench --src <src.opu> [--out <dir>] [--full]
                                   measured compile/build times and artifact sizes
+  bench --src <src.opu> --compare
+                                  measured software vs GPU backend times + byte equality
   profile --src <src.opu> [--frames N]
                                   measured software-raster frame timings (1..600)
+  profile --src <src.opu> --repeat N
+                                  measured repeated runs, warmup excluded and reported (1..600)
   inspect <ir.json>               read-only layer + a11y trees side by side
   test                            end-to-end golden pipeline checks
 
@@ -110,12 +115,18 @@ async function main(argv) {
     }
     case 'bench': {
       const { src } = requireFlags(flags, ['src']);
+      if (flagEnabled(flags, 'compare')) {
+        return compareBackends({ src });
+      }
       const out = typeof flags.out === 'string' ? flags.out : path.join('tmp', 'bench');
       await bench({ src, out, full: flagEnabled(flags, 'full') });
       return 0;
     }
     case 'profile': {
       const { src } = requireFlags(flags, ['src']);
+      if (flags.repeat !== undefined) {
+        return profileRepeat({ src, repeat: flags.repeat });
+      }
       return profile({ src, frames: flags.frames });
     }
     case 'inspect': {

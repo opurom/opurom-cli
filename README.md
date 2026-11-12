@@ -37,7 +37,9 @@ your shell and no npm packages are fetched.
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
 | `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
+| `bench --src <src.opu> --compare` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
 | `profile --src <src.opu> [--frames N]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
+| `profile --src <src.opu> --repeat N` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 
@@ -55,7 +57,9 @@ cli size tmp/web-min
 cli build --src ../opurom-spec/counter.opu --target wechat --out tmp/wechat
 cli build --src ../opurom-spec/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-spec/counter.opu --out tmp/bench --full
+cli bench --src ../opurom-spec/counter.opu --compare
 cli profile --src ../opurom-spec/counter.opu --frames 30
+cli profile --src ../opurom-spec/counter.opu --repeat 10
 cli inspect ../opurom-spec/counter.opuir.json
 # Long-running: cli dev --src tmp/demo/src/main.opu --sync --port 5178
 cli test
@@ -304,10 +308,14 @@ orchestration plan, optimizer step, measured byte formatting, explicit fallback)
 (percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting,
 read-only `inspect`), `lib/r6.mjs` (minifier literal edge cases, `node --check` on every
 emitter's real output, golden web app behaviour in a DOM harness, measured size report math,
-unused asset removal, byte-identical default build) and the e2e output parsers.
+unused asset removal, byte-identical default build), `lib/r7.mjs` (repeat-count validation,
+warmup-exclusion arithmetic, percentile math on known arrays, the environment description, the
+`profile --repeat` report, the compare byte-equality reporting and the unavailable-GPU path) and
+the e2e output parsers.
 `test/r3.test.mjs` also drives stub compilers,
 two SSE clients and a real local `dev --sync` server; `test/r4.test.mjs` drives a stub renderer
-and compares IR bytes before/after `inspect`. They pass with **no sibling Rust repos present**.
+and compares IR bytes before/after `inspect`; `test/r7.test.mjs` drives stub compiler, renderer
+and GPU-backend binaries. They pass with **no sibling Rust repos present**.
 
 ## `test`: end-to-end checks
 
@@ -439,8 +447,56 @@ OPUROM bench --full (measured on this machine, this run)
 
 Those values are from that run only; rerun the command for values on your machine. `bench`
 deliberately makes **no** fps, startup, throughput or competitor claims. See `profile` below for
-measured sequential software-raster frame times and a derived fps for this host only; no GPU
-backend or device matrix exists yet.
+measured sequential software-raster frame times and a derived fps for this host only, and
+`bench --compare` for the software-versus-GPU-backend comparison of two OPUROM backends.
+
+## `bench --compare`: software renderer vs GPU backend
+
+```sh
+node bin/opurom.mjs bench --src ../opurom-spec/counter.opu --compare
+```
+
+`--compare` renders the **same scene** through two sibling backends and reports both MEASURED
+times plus the byte-equality result of the two outputs:
+
+1. `opurom-render` (software raster) writes `software.ppm` and, in the same run, the exact
+   display list (`--commands`) the GPU backend consumes.
+2. `opurom-gpu raster` (the Metal compute backend) executes that display list and writes
+   `gpu.ppm`.
+3. The two PPM files are compared **byte for byte**; the report prints the sha256 of the
+   shared bytes and the byte count.
+
+Every speed statement is paired with the correctness result:
+
+- When the two outputs are byte-equal, the report prints the measured ratio
+  (`speed: gpu is <x>x the software renderer time (measured; byte-equal outputs)`).
+- When the outputs differ, **no** ratio is printed: the report says
+  `speed: n/a (outputs are not byte-equal; no speed claim over a different image)`.
+- When the GPU backend (or its sibling repo) is unavailable, the software measurement is still
+  printed, the GPU side prints `n/a (reason)`, the byte-equality result prints `n/a (reason)`
+  and the speed line prints `n/a (one backend could not be measured)`.
+
+One real run of `counter.opu` at 800x600 on this machine produced:
+
+```
+OPUROM bench --compare (MEASURED software vs GPU backend, this host)
+src: /Users/mac/work/opurom/opurom-spec/counter.opu
+software renderer (opurom-render): 101.561791 ms
+gpu backend (opurom-gpu): 298.659667 ms
+byte equality of the two outputs: byte-equal (5b842542b08d88e05eaaacf9b57b6b0d901b4044aa6201b7745d45c732b6ccc5 sha256, 1440015 B each)
+speed: gpu is 0.34x the software renderer time (measured; byte-equal outputs)
+environment: cpu=Apple M6 (12 logical cpus)
+environment: os release=27.3.0
+environment: node=v26.13.0
+environment: raster=software raster (opurom-render) and GPU compute backend (opurom-gpu) on this host
+Note: both timings are on this host, NOT a device/competitor benchmark.
+No competitor binary was executed and no competitor number was estimated.
+```
+
+Those values are from that run only; rerun the command for values on your machine. Both
+timings include process launch and file output, so they are **not** a pure GPU-vs-CPU kernel
+comparison. The comparison is **OPUROM backend against OPUROM backend only**: no competitor
+binary is executed and no competitor number is estimated. There is no device matrix.
 
 ## `profile`: measured software-raster frames
 
@@ -457,8 +513,56 @@ range fail with a clear error. If a tool or any frame is unavailable, every stat
 `n/a (reason)` and the command exits nonzero. No number is invented.
 
 These are software-raster timings on this host, **NOT a device/competitor benchmark**. Each
-measurement includes process launch and PPM output. There is no GPU backend, no device matrix,
-no debugger/profiler GUI and no competitive claim.
+measurement includes process launch and PPM output. There is no device matrix, no
+debugger/profiler GUI and no competitive claim.
+
+## `profile --repeat`: measured repeated work with the warmup excluded
+
+```sh
+node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --repeat 10
+```
+
+`--repeat N` runs the **same work N times** (one real `opurom-render` process per run at
+800x600, identical to `--frames`), discards a documented warmup count and reports the
+statistics of the **measured runs only**:
+
+- The warmup count is 2 and is reported explicitly as `warmup excluded: 2`. The first two runs
+  pay for process start-up, page-cache and first-touch costs, so they are discarded.
+- The warmup shrinks when `N` is small, so that **at least one measured run always survives**:
+  `N = 1` discards 0 warmup runs, `N = 2` discards 1, `N = 3` discards 2.
+- The reported `median`, `p95`, `min`, `max` and `achieved fps` are computed over the measured
+  runs only, never over the discarded ones. The fps is `measured runs / sum(measured times)`.
+- `--repeat` defaults to 10 and accepts 1..600. Anything else (`0`, `-1`, `601`, `3.5`,
+  `nope`) fails with `invalid --repeat: <value> (expected 1..600)` before any tool is run.
+
+Every report states the environment it was measured in: the CPU model from `os.cpus()[0].model`
+with the logical CPU count, the OS release from `os.release()`, the Node version, and whether
+the measurement is a **software raster on this host**. Any statistic that could not be measured
+prints `n/a (reason)` — never a fabricated number.
+
+One real run of `counter.opu` on this machine produced:
+
+```
+OPUROM profile --repeat (MEASURED repeated identical work on this host)
+src: /Users/mac/work/opurom/opurom-spec/counter.opu
+repeat: 10 requested / warmup excluded: 2 / 8 measured runs
+median: 57.757874500000014 ms
+p95: 59.80372555000001 ms
+min: 56.04404200000002 ms
+max: 59.90545900000001 ms
+achieved fps: 17.316910598730278 (8 measured runs / 461.97616800000003 ms of measured time)
+environment: cpu=Apple M6 (12 logical cpus)
+environment: os release=27.3.0
+environment: node=v26.13.0
+environment: raster=software raster on this host (opurom-render CPU path)
+Note: software-raster timings on this host, NOT a device/competitor benchmark.
+No competitor binary was executed and no competitor number was estimated.
+```
+
+Those values are from that run only; rerun the command for values on your machine. These are
+software-raster timings on this host, **NOT a device/competitor benchmark**. The command does
+not report whether the machine was idle — that is not measurable from inside the CLI — so it
+states the host, the CPU, the OS and the raster kind instead of claiming an idle machine.
 
 ## `inspect`: read-only layer and a11y trees
 
@@ -475,22 +579,28 @@ frame-wide rect count, not an invented per-layer rect list. If the renderer is u
 `--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
 screen-reader integration.
 
-## Status (round 6)
+## Status (round 7)
 
 - **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
   (offline-forced for R4 tools), offline-first generated-service builds, `doctor`, `targets`,
   `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`, opt-in `--minify`),
   `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
   rebuild/restart + `--sync` preview hub), `bench` (default shape and measured `--full` table),
-  `profile` (measured sequential software-raster frames with honest `n/a`), `inspect`
-  (read-only layer/a11y trees), `size` (measured before/after byte table), `test` orchestration
-  (incl. full-stack, wasm and minified-build checks), README, own git repo, clean tree.
-- `node --test`: the dependency-free unit suite (55 tests: the original 48 plus 7 R6 tests)
-  passes with **no sibling Rust repo present**. It covers the new flags, exact measured
-  formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client `dev --sync`
-  SSE server, percentile math, frame caps, layer formatting, an `inspect` byte comparison, and
-  the R6 minifier (literal edge cases, `node --check` on every emitter's real output, golden
-  web app behaviour, measured size math, unused asset removal, byte-identical default build).
+  `bench --compare` (software vs GPU backend, both MEASURED, paired with the byte-equality
+  result), `profile` (measured sequential software-raster frames with honest `n/a`),
+  `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated),
+  `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `test`
+  orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
+  clean tree.
+- `node --test`: the dependency-free unit suite (70 tests: the original 48 plus 7 R6 tests plus
+  15 R7 tests) passes with **no sibling Rust repo present**. It covers the new flags, exact
+  measured formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
+  `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
+  comparison, the R6 minifier (literal edge cases, `node --check` on every emitter's real
+  output, golden web app behaviour, measured size math, unused asset removal, byte-identical
+  default build) and the R7 measurement layer (repeat-count validation, warmup-exclusion
+  arithmetic, the environment description, the compare byte-equality reporting and the
+  unavailable-GPU path).
 - `node bin/opurom.mjs test`: 10 checks PASS at commit time — the 7 round-1 checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
@@ -505,19 +615,27 @@ screen-reader integration.
   the real numbers shown above; two `dev --sync` SSE clients received snapshots and the same
   reload frame after a source change; `profile` ran real renderer frames and printed MEASURED
   percentiles plus derived fps; `inspect` printed the side-by-side trees from
-  `opurom-render --a11y` without changing IR bytes. No number is invented.
+  `opurom-render --a11y` without changing IR bytes; `profile --repeat 10` ran ten real renderer
+  runs, excluded two warmup runs and printed the measured statistics of the eight remaining
+  runs; `bench --compare` rendered the same scene through `opurom-render` and `opurom-gpu` and
+  reported **byte-equal** outputs with both measured times. No number is invented.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
-  with the reason instead of a false pass. Unavailable `bench --full` rows and `profile`
-  measurements print `n/a (reason)`.
-- **Not implemented (R7+)**: Metal/Vulkan/ANGLE GPU backends, real OS-native window adapters,
+  with the reason instead of a false pass. Unavailable `bench --full` rows, `profile`,
+  `profile --repeat` and `bench --compare` measurements print `n/a (reason)`.
+- **Honest scope of the R7 measurement work**: `profile --repeat` measures this host's software
+  raster only and states the CPU, the OS release, the Node version and the raster kind; it
+  cannot observe machine idleness from inside the CLI and does not claim it. `bench --compare`
+  compares two **OPUROM** backends against each other only: **no competitor binary is executed
+  and no competitor number is estimated**. There is **no device matrix**, no competitive fps
+  benchmark, no cross-OS sweep and no debugger/profiler GUI. For `--minify`: **no bundler, no
+  source maps, no Brotli/zstd, no dependency graph analysis** beyond the emitter's own output,
+  and **no identifier mangling or dead-code elimination**. There is **no debugger/profiler GUI**
+  in this CLI; the separate DAP subset server has no GUI client. There is **no multi-OS sync**:
+  `dev --sync` is a dev preview hub for N browser clients, not device-conformance testing.
+  `inspect` is data-only and read-only.
+- **Not implemented (R8+)**: Vulkan/ANGLE/D3D GPU backends, real OS-native window adapters,
   screen-reader OS integration, real device-conformance/competitive fps benchmarks, a device
   matrix, TLS/auth/cloud deployment, a remote package marketplace and a debugger/profiler GUI.
-  For `--minify`: **no bundler, no source maps, no Brotli/zstd, no dependency graph analysis**
-  beyond the emitter's own output, and **no identifier mangling or dead-code elimination**.
-  There is **no debugger/profiler GUI** in this CLI; the separate DAP subset server has no GUI
-  client. There is **no multi-OS sync**: `dev --sync` is a dev preview hub for N browser clients,
-  not device-conformance testing. `profile` measures this host's software raster only; `inspect`
-  is data-only and read-only. No competitor claims are made.
 
 ## Layout
 
@@ -537,9 +655,10 @@ lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, 
 lib/bench.mjs         measured timings + artifact sizes + bench --full table
 lib/r4.mjs            measured profile + read-only layer/a11y inspect
 lib/r6.mjs            safe JS minifier, unused asset removal, measured size report
+lib/r7.mjs            profile --repeat stats + environment, bench --compare byte equality
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
 test/fixtures/inspect.opuir.json  R4 inspector fixture
 test/fixtures/r6/*.js.fixture     real emitter outputs (web, mini programs, wasm host)
-test/*.test.mjs       node:test unit suite (55 tests)
+test/*.test.mjs       node:test unit suite (70 tests)
 ```
