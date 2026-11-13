@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Standalone loopback sync hub for `dev --sync --clients N`; no Rust server.
 import { parseArgs } from '../lib/args.mjs';
-import { DEFAULT_SYNC_PORT, SYNC_PATH, parseClientCount, startLoopbackHub } from '../lib/r8.mjs';
+import { DEFAULT_SYNC_PORT, SYNC_PATH, parseClientCount, startLoopbackHub } from '../lib/sync.mjs';
 
 async function main() {
   const { flags } = parseArgs(process.argv.slice(2));

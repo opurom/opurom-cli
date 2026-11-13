@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { tmpDir } from '../lib/paths.mjs';
-import { percentile } from '../lib/r4.mjs';
+import { percentile } from '../lib/async_runtime.mjs';
 import {
   DEFAULT_REPEAT, DEFAULT_WARMUP, MAX_REPEAT, compareBackends, environmentDescription,
   formatCompareReport, formatEnvironment, formatRepeatReport, measuredRuns, parseRepeatCount,
   profileRepeat, repeatStats, warmupFor,
-} from '../lib/r7.mjs';
+} from '../lib/profile.mjs';
 
 const COMPILER_STUB = `#!/bin/sh
 printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[],"tree":{},"theme":{}}' > "$4"

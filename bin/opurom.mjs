@@ -10,10 +10,10 @@ import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
-import { inspect, profile } from '../lib/r4.mjs';
-import { sizeReport } from '../lib/r6.mjs';
-import { compareBackends, profileRepeat } from '../lib/r7.mjs';
-import { DEFAULT_SYNC_PORT, verifySync } from '../lib/r8.mjs';
+import { inspect, profile } from '../lib/async_runtime.mjs';
+import { sizeReport } from '../lib/minify.mjs';
+import { compareBackends, profileRepeat } from '../lib/profile.mjs';
+import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 

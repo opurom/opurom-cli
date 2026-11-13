@@ -60,7 +60,7 @@ function reloadFrame(text) {
   return /event: reload\ndata: [^\n]*\n\n/.exec(text)?.[0] ?? '';
 }
 
-test('R3 flags parse as booleans and can be disabled explicitly', () => {
+test('boolean flags parse as booleans and can be disabled explicitly', () => {
   const { flags, positionals } = parseArgs([
     'build', '--src', 'main.opu', '--target', 'web', '--out', 'dist',
     '--optimize', '--full', '--sync', '--port', '5178',

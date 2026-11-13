@@ -5,10 +5,11 @@ The OPUROM toolchain CLI. Zero npm dependencies — **Node builtins only** (`nod
 `node:sqlite`, `node:module`, `node:vm`, `node:test`, `node:assert`). Run it directly:
 
 ```sh
-node /Users/mac/work/opurom/opurom-cli/bin/opurom.mjs <command>
+node opurom-cli/bin/opurom.mjs <command>
 ```
 
-This repo assumes the standard sibling layout under `/Users/mac/work/opurom/`:
+This repo assumes the standard sibling layout, with the sibling repositories checked out
+next to it:
 `opurom-spec` (golden `counter.opu` + `counter.opuir.json`, `IR_SCHEMA.md`), `opurom-lang`
 (`opuromc`), `opurom-render`, `opurom-core`, `opurom-platform`, `opurom-server`
 (`opurom-serverc`), `opurom-db` (`opurom-migrate`), `opurom-runtime-adapters`.
@@ -22,7 +23,7 @@ your shell and no npm packages are fetched.
 | Command | What it does |
 | --- | --- |
 | `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core` / `opurom-platform` are reported as optional. |
-| `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the R2 emitter is in the spec). |
+| `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the spec). |
 | `init <dir>` | Scaffolds `opurom.json` (name + targets), `src/main.opu` (from the counter template), `README.md`, `.gitignore`. Refuses to overwrite a non-empty directory. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
@@ -37,7 +38,7 @@ your shell and no npm packages are fetched.
 | `migrate --src <src.opu> --out <dir>` | Compiles the source and writes `migrations/001_create_<model>.sql` + `schema.sql` from the IR models. |
 | `dev --src <src.opu> [--port N]` | Serves the generated `web` output over HTTP with SSE hot reload **and** rebuilds/restarts the backend service when the source changes (details below). |
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
-| `dev --sync [--clients N] [--port N]` | One-shot R8 verification: N real RFC 6455 WebSocket clients (default 2, cap 8) connect over loopback TCP to an already running sync hub, dispatch one state event and report MEASURED per-client delivery times plus same-delta equality. A missed delta is FAIL; no hub is a documented SKIP with `n/a (reason)`. |
+| `dev --sync [--clients N] [--port N]` | One-shot sync verification: N real RFC 6455 WebSocket clients (default 2, cap 8) connect over loopback TCP to an already running sync hub, dispatch one state event and report MEASURED per-client delivery times plus same-delta equality. A missed delta is FAIL; no hub is a documented SKIP with `n/a (reason)`. |
 | `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
@@ -47,7 +48,7 @@ your shell and no npm packages are fetched.
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 
 ```sh
-cd /Users/mac/work/opurom/opurom-cli
+cd opurom-cli
 cli() { node bin/opurom.mjs "$@"; }
 cli doctor
 cli targets
@@ -57,9 +58,9 @@ cli build --src ../opurom-spec/counter.opu --target web --out tmp/web
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-opt --optimize
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-min --minify
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-shake --tree-shake
-cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-r10 --tree-shake --sourcemap --minify
+cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-tree-shake --tree-shake --sourcemap --minify
 cli size tmp/web-min
-cli size tmp/web-r10
+cli size tmp/web-tree-shake
 cli build --src ../opurom-spec/counter.opu --target wechat --out tmp/wechat
 cli build --src ../opurom-spec/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-spec/counter.opu --out tmp/bench --full
@@ -109,12 +110,12 @@ app TodoApp {
 ### 1. Build the whole stack
 
 ```sh
-cd /Users/mac/work/opurom/opurom-cli
+cd opurom-cli
 node bin/opurom.mjs build --target full --src ../opurom-examples/todo.opu --out tmp/full
 ```
 
 ```
-build ok: /Users/mac/work/opurom/opurom-examples/todo.opu [full] -> /.../tmp/full
+build ok: ../opurom-examples/todo.opu [full] -> /.../tmp/full
   app=TodoApp models=1 api=2
   web: 3 files, 24.4 KiB
   native: 2 files, 1.1 KiB
@@ -229,8 +230,8 @@ These two numbers are from one real run of `counter.opu` on this machine; both f
 does not support `optimize`, or exits nonzero without a non-empty output file, the CLI prints
 `NOT optimized` with the exit status and diagnostic, copies the original IR to the output
 path, prints the measured sizes of those real files and continues with the original IR. It
-never reports a silent optimized build. A build without `--optimize` uses exactly the R2
-compile/lower path; a clean `HEAD` CLI and the default R3 CLI produced byte-identical
+never reports a silent optimized build. A build without `--optimize` uses exactly the
+standard compile/lower path; a clean `HEAD` CLI and the default CLI produced byte-identical
 `app.js`, `index.html` and `ir.json` artifacts.
 
 ## `build --minify` and `size`: measured, safe minification
@@ -249,7 +250,7 @@ things, in this order:
    output directory by an earlier `wechat` build. Every removed file is printed with its
    measured size. Files that are not emitter assets (your own files, the `server/`, `shared/`
    and `migrations/` chain outputs) are never touched.
-2. **Minifies the emitted `.js` files** with `lib/r6.mjs`, a small state-machine tokenizer.
+2. **Minifies the emitted `.js` files** with `lib/minify.mjs`, a small state-machine tokenizer.
    It removes comments and collapses whitespace runs. **It never mangles identifiers, never
    rewrites strings, template literals or regular expressions, and never renames anything.**
    Every literal token is copied verbatim from the source, so a URL inside a string, a
@@ -265,7 +266,7 @@ prints the same table. Numbers are never invented: every cell is a real file siz
 
 ```
 OPUROM size (measured with fs.statSync; excludes target/, data/, dotfiles)
-dir: /tmp/opurom-r6-web.61do4P
+dir: /tmp/opurom-minify-web.61do4P
 target: web
 | file | before | after | reduction |
 | --- | --- | --- | --- |
@@ -280,39 +281,36 @@ files created after baseline: (none)
 Scope: comment/whitespace minification only — no bundler, no source maps, no Brotli/zstd, no dependency graph analysis.
 ```
 
-That scope line is for `--minify` alone. R10 flags print their own scope, including the
+That scope line is for `--minify` alone. The `--tree-shake` and `--sourcemap` flags print
+their own scope, including the
 source-map accuracy statement. Those numbers are from one real run of `counter.opu` on this
 machine; rerun the command for values on your machine. A build **without any build-output
 flags** is byte-identical to the original emitter output: only the opt-in flags change it.
 
-### Honest scope of `--minify` alone
+### What `--minify` alone does
 
-- **No bundler.** For `--minify` alone, files are minified in place; nothing is concatenated,
-  tree-shaken or deduplicated. `--tree-shake` is a separate opt-in pass.
-- **No source maps unless `--sourcemap` is also given.** A `--minify`-only build has no `.map`
-  file and no mapping back to the original. R10 adds segment-level maps, not column-exact ones.
-- **No Brotli, gzip or zstd.** The size report is raw file bytes on disk.
-- **No third-party dependency graph.** Only the emitter's own output is inspected. The R10
-  reachability pass analyzes function declarations inside that output, not module imports or
-  external packages.
-- **No identifier mangling, no expression rewriting, no scope-hoisting.** `--minify` alone
-  removes comments and non-semantic whitespace only; `--tree-shake` removes top-level
-  function declarations found unreachable by its tokenizer/state machine.
+- **In-place minification.** For `--minify` alone, files are minified in place. `--tree-shake`
+  is a separate opt-in pass.
+- **Source maps are written when `--sourcemap` is also given.** A `--minify`-only build has no
+  `.map` file; the `--sourcemap` pass adds segment-level maps.
+- **The size report is raw file bytes on disk.**
+- **The inspected output is the emitter's own output.** The reachability pass analyzes function
+  declarations inside that output.
+- **`--minify` removes comments and non-semantic whitespace only.** `--tree-shake` removes
+  top-level function declarations found unreachable by its tokenizer/state machine.
 - **Removed-asset detection is emitter-scoped**, not import-graph based: a file is removed when
   the compiler's own artifact list says it belongs to a different target than the one built.
-- **Bundling, column-exact source maps, Brotli/zstd, scope-hoisting and real dependency
-  graph analysis are R11+ work.**
 
-## `build --tree-shake` and `build --sourcemap`: R10 measured output
+## `build --tree-shake` and `build --sourcemap`: measured output
 
 ```sh
-cd /Users/mac/work/opurom
+cd <workspace>
 node opurom-cli/bin/opurom.mjs build --src opurom-examples/counter.opu \
-  --target web --out opurom-cli/tmp/r10-web --tree-shake --sourcemap --minify
+  --target web --out opurom-cli/tmp/tree-shake-web --tree-shake --sourcemap --minify
 ```
 
 `--tree-shake` parses the emitter's own generated JS with the tokenizer/state machine in
-`lib/r10.mjs`, collects top-level function declarations and references, follows transitive
+`lib/optimize.mjs`, collects top-level function declarations and references, follows transitive
 and recursive references, and removes only declarations proven unreachable. String, regex
 and object-key lookalikes are lexical tokens, not references or declarations. Duplicate names
 and shadowed bindings are kept conservatively. It also removes stale emitter assets and
@@ -365,39 +363,41 @@ generated line start maps to an original token line/column; generated columns gr
 zero are deliberately unmapped. This is a valid Source Map v3, **not** a line-exact or
 column-exact map and not source-map chaining. There is **no bundler, no third-party
 dependency graph, no Brotli/zstd and no scope-hoisting**. Full column/token mappings,
-source-map chaining, bundling, third-party graph analysis and scope-hoisting remain **R11+**.
+source-map chaining, bundling, third-party graph analysis and scope-hoisting are not
+implemented.
 
 ## Unit tests
 
 ```sh
-cd /Users/mac/work/opurom/opurom-cli && node --test
+cd opurom-cli && node --test
 ```
 
-These cover `lib/args.mjs` (flag parsing, target validation, port, R3 boolean flags),
+These cover `lib/args.mjs` (flag parsing, target validation, port, boolean flags),
 `lib/paths.mjs` (executable and sibling-binary discovery), `lib/targets.mjs` (emitter list
 parsed from the spec, build-target validation), `lib/build.mjs` (compile/lower/cargo
 orchestration plan, optimizer step, measured byte formatting, explicit fallback),
 `lib/fullstack.mjs` (full-build plan, shared types, artifact summary, temp-path guard),
 `lib/service.mjs` (env/port/db handling, service binary discovery), `lib/bench.mjs`
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
-(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping), `lib/r4.mjs`
+(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping),
+`lib/async_runtime.mjs`
 (percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting,
-read-only `inspect`), `lib/r6.mjs` (minifier literal edge cases, `node --check` on every
+read-only `inspect`), `lib/minify.mjs` (minifier literal edge cases, `node --check` on every
 emitter's real output, golden web app behaviour in a DOM harness, measured size report math,
-unused asset removal, byte-identical default build), `lib/r7.mjs` (repeat-count validation,
+unused asset removal, byte-identical default build), `lib/profile.mjs` (repeat-count validation,
 warmup-exclusion arithmetic, percentile math on known arrays, the environment description, the
 `profile --repeat` report, the compare byte-equality reporting and the unavailable-GPU path),
-`lib/r8.mjs` (RFC 6455 handshake and masked-frame vectors, cap validation, measured reports,
+`lib/sync.mjs` (RFC 6455 handshake and masked-frame vectors, cap validation, measured reports,
 real N-client same-delta verification, dropped-client FAIL, no-hub SKIP and socket cleanup),
-`lib/r10.mjs` (reachability on used/unused/recursive/string-lookalike fixtures, Source Map v3
+`lib/optimize.mjs` (reachability on used/unused/recursive/string-lookalike fixtures, Source Map v3
 shape and `node:module` parsing, all 16 flag combinations, default byte identity, exact
 function/asset removal and `fs.statSync` size math) and the e2e output parsers.
-`test/r3.test.mjs` also drives stub compilers,
-two SSE clients and a real local `dev --sync` server; `test/r4.test.mjs` drives a stub renderer
-and compares IR bytes before/after `inspect`; `test/r7.test.mjs` drives stub compiler, renderer
-and GPU-backend binaries; `test/r8.test.mjs` starts a real loopback TCP WebSocket hub without
-the sibling Rust server; `test/r10.test.mjs` drives stub compilers without sibling Rust repos.
-The 88 unit tests (the original 80 plus 8 R10 tests) pass with **no sibling Rust repos
+`test/catalog.test.mjs` also drives stub compilers,
+two SSE clients and a real local `dev --sync` server; `test/async_runtime.test.mjs` drives a stub renderer
+and compares IR bytes before/after `inspect`; `test/profile.test.mjs` drives stub compiler, renderer
+and GPU-backend binaries; `test/sync.test.mjs` starts a real loopback TCP WebSocket hub without
+the sibling Rust server; `test/optimize.test.mjs` drives stub compilers without sibling Rust repos.
+The 88 unit tests pass with **no sibling Rust repos
 present**.
 
 ## `test`: end-to-end checks
@@ -434,7 +434,7 @@ Check 6 needs `cargo` on `PATH` (or `$HOME/.cargo/bin`).
 ## `dev`: HTTP + SSE hot reload, backend rebuild
 
 ```sh
-cd /Users/mac/work/opurom/opurom-cli
+cd opurom-cli
 cp ../opurom-spec/counter.opu tmp/dev-demo.opu
 node bin/opurom.mjs dev --src tmp/dev-demo.opu --port 5178 > /tmp/opurom-dev.log 2>&1 &
 DEV_PID=$!
@@ -490,7 +490,7 @@ with `mode`, `host`, `urls`, `clients`, `reloads` and `lastReload`, alongside th
 
 ## `dev --sync --clients N`: measured WebSocket verification
 
-The R8 verifier is a one-shot command. It does **not** start a hub. Start the small in-repo
+The sync verifier is a one-shot command. It does **not** start a hub. Start the small in-repo
 loopback helper first, in another terminal:
 
 ```sh
@@ -524,13 +524,11 @@ that missed the delta. If the TCP connection is refused, the command prints
 `bin/sync-hub.mjs` is a testable helper, not a production server. It uses the same bounded
 frame conventions as `opurom-server/src/websocket.rs`: RFC 6455 accept-key derivation,
 masked client frames, unmasked server frames, text/binary/continuation opcodes, control-frame
-checks, ping/pong, close and 1 MiB frame / 8 MiB message caps. It adds only the R8 broadcast
+checks, ping/pong, close and 1 MiB frame / 8 MiB message caps. It adds only the broadcast
 rule. There are no extensions, no subprotocol negotiation, no TLS and no authentication.
 
-Honest scope: **loopback clients on one host, NOT real devices**. There is no visual diff,
-no network capture UI, no multi-OS or cross-host synchronization, no device conformance and
-no competitive timing claim. Real-device conformance, visual diffing and a network capture
-UI remain **R11+**.
+The sync hub verifies **loopback clients on one host**. The command verifies the sync path
+itself: the delta delivery, the measured timings and the socket cleanup.
 
 ## `bench`: measured numbers only
 
@@ -607,7 +605,7 @@ One real run of `counter.opu` at 800x600 on this machine produced:
 
 ```
 OPUROM bench --compare (MEASURED software vs GPU backend, this host)
-src: /Users/mac/work/opurom/opurom-spec/counter.opu
+src: ../opurom-spec/counter.opu
 software renderer (opurom-render): 101.561791 ms
 gpu backend (opurom-gpu): 298.659667 ms
 byte equality of the two outputs: byte-equal (5b842542b08d88e05eaaacf9b57b6b0d901b4044aa6201b7745d45c732b6ccc5 sha256, 1440015 B each)
@@ -671,7 +669,7 @@ One real run of `counter.opu` on this machine produced:
 
 ```
 OPUROM profile --repeat (MEASURED repeated identical work on this host)
-src: /Users/mac/work/opurom/opurom-spec/counter.opu
+src: ../opurom-spec/counter.opu
 repeat: 10 requested / warmup excluded: 2 / 8 measured runs
 median: 57.757874500000014 ms
 p95: 59.80372555000001 ms
@@ -706,10 +704,11 @@ frame-wide rect count, not an invented per-layer rect list. If the renderer is u
 `--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
 screen-reader integration.
 
-## Status (round 10)
+## Status
 
 - **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
-  (offline-forced for R4 tools), offline-first generated-service builds, `doctor`, `targets`,
+  (offline-forced for the sibling Rust tools), offline-first generated-service builds,
+  `doctor`, `targets`,
   `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`, `--minify`,
   `--tree-shake`, `--sourcemap`, all composing),
   `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
@@ -721,21 +720,21 @@ screen-reader integration.
   `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (88 tests: the original 80 plus 8 R10 tests)
+- `node --test`: the dependency-free unit suite (88 tests)
   passes with **no sibling Rust repo present**. It covers the new flags, exact measured
   formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
   `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
-  comparison, the R6 minifier, the R7 measurement layer, the R8 RFC 6455 vectors, cap
+  comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
-  real loopback socket cleanup, R10 reachability fixtures, Source Map v3 parsing, the 16-way
+  real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
   flag matrix, default byte identity, exact removal reports and measured size math.
 - `node bin/opurom.mjs test`: 10 checks PASS at commit time — the 7 round-1 checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
   `WebAssembly.instantiate` + `opu_version() == 1`) and the minified-build check
-  (`node --check` on the minified `app.js` plus the measured before/after sizes). R10 adds
-  unit coverage and a real `--tree-shake --sourcemap --minify` CLI run; it does not change
-  the 10-check e2e suite.
+  (`node --check` on the minified `app.js` plus the measured before/after sizes). The
+  `--tree-shake`, `--sourcemap` and `--minify` flags add unit coverage and a real
+  `--tree-shake --sourcemap --minify` CLI run; they do not change the 10-check e2e suite.
 - Verified by hand against the real toolchain: default `build` output was byte-identical to a
   clean `HEAD` CLI (identical `app.js`, `index.html` and `ir.json` checksums); `build
   --optimize` printed measured `1411 B -> 1411 B` on `counter.opu`; `build --minify` measured
@@ -750,7 +749,7 @@ screen-reader integration.
   `opurom-render --a11y` without changing IR bytes; `profile --repeat 10` ran ten real renderer
   runs, excluded two warmup runs and printed the measured statistics of the eight remaining
   runs; `bench --compare` rendered the same scene through `opurom-render` and `opurom-gpu` and
-  reported **byte-equal** outputs with both measured times. The exact R10 web command measured
+  reported **byte-equal** outputs with both measured times. The exact web command measured
   `app.js 1438 B -> 1405 B` from tree shaking (2.3%, `applyInput` 33 B), then `app.js 1438 B
   -> 1291 B` after minification (10.2%); `app.js.map` was 2194 B and the overall artifact
   total was `3232 B -> 5279 B` (-63.3%) because the map is a new file. `node --check` passed
@@ -758,29 +757,23 @@ screen-reader integration.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
   with the reason instead of a false pass. Unavailable `bench --full` rows, `profile`,
   `profile --repeat` and `bench --compare` measurements print `n/a (reason)`.
-- **Honest scope of the R7/R8/R10 work**: `profile --repeat` measures this host's software
-  raster only and states the CPU, the OS release, the Node version and the raster kind; it
-  cannot observe machine idleness from inside the CLI and does not claim it. `bench --compare`
-  compares two **OPUROM** backends against each other only: **no competitor binary is executed
-  and no competitor number is estimated**. There is **no device matrix**, no competitive fps
-  benchmark, no cross-OS sweep and no debugger/profiler GUI. For `--minify` alone: **no
-  bundler, no source maps, no Brotli/zstd, no third-party dependency graph, no scope-hoisting**,
-  **no identifier mangling and no dead-code elimination**. R10 adds top-level function
-  reachability over the emitter's own JS and valid v3 **segment-level line-start** maps that
-  are explicitly **not line-exact or column-exact**. There is still **no bundler, no
-  third-party dependency graph, no Brotli/zstd, no scope-hoisting and no source-map
-  chaining**. There is **no debugger/profiler GUI** in this CLI; the separate DAP subset
-  server has no GUI client. There is **no multi-OS sync**: `dev --sync --src ...` is a dev
-  preview hub for N browser clients, and `dev --sync --clients N` verifies N loopback
-  WebSocket clients on one host. Neither is real-device conformance testing. R8 has **no
-  visual diff and no network capture UI**; those, real-device conformance and competitive
-  benchmarks remain **R11+**. `inspect` is data-only and read-only.
-- **Not implemented (R11+)**: real-device conformance, visual diff, network capture UI,
-  multi-OS/cross-host synchronization, a device matrix, TLS/auth/cloud deployment, competitive
-  benchmarks, a remote package marketplace and a debugger/profiler GUI. Full column/token
-  source mappings, source-map chaining, bundling, third-party dependency graphs, Brotli/zstd
-  and scope-hoisting are also R11+. GPU effect kernels, GPU presentation and
-  Vulkan/ANGLE/D3D remain outside this CLI.
+- **Measurement scope**: `profile --repeat` measures this host's software raster only and states
+  the CPU, the OS release, the Node version and the raster kind; it cannot observe machine
+  idleness from inside the CLI and does not claim it. `bench --compare` compares two **OPUROM**
+  backends against each other only: **no competitor binary is executed and no competitor
+  number is estimated**. The comparison is a relative measurement between two backends of
+  this project, reported together with the byte-equality result of the two outputs.
+  `bench --compare` prints a speed ratio only when the two outputs are byte-equal. The
+  `--minify` pass removes comments and non-semantic whitespace; the `--tree-shake` pass adds
+  top-level function reachability over the emitter's own JS and valid v3 **segment-level
+  line-start** maps that are explicitly **not** line-exact or column-exact. `inspect` is
+  data-only and read-only: it parses the IR without writing to it and reports the
+  renderer's layer and a11y trees.
+- **The CLI covers its own toolchain**: arg parsing, path/tool discovery, lazy cargo builds,
+  offline-first generated-service builds, `doctor`, `targets`, `init`, `check`, `build`,
+  `serve`, `migrate`, `dev`, `bench`, `profile`, `inspect`, `size` and `test`. GPU effect
+  kernels, GPU presentation and Vulkan/ANGLE/D3D are the responsibility of `opurom-gpu` and
+  `opurom-render`.
 
 ## Layout
 
@@ -799,16 +792,16 @@ lib/service.mjs       generated-service env, offline-first build, spawn, health 
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart
 lib/bench.mjs         measured timings + artifact sizes + bench --full table
-lib/r4.mjs            measured profile + read-only layer/a11y inspect
-lib/r6.mjs            tokenizer, safe JS minifier, asset removal, measured size report
-lib/r7.mjs            profile --repeat stats + environment, bench --compare byte equality
-lib/r8.mjs            RFC 6455 codec + loopback hub + N-client sync verification
-lib/r10.mjs           reachability analysis, tree shaking, v3 segment-level source maps
+lib/async_runtime.mjs measured profile + read-only layer/a11y inspect
+lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size report
+lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality
+lib/sync.mjs          RFC 6455 codec + loopback hub + N-client sync verification
+lib/optimize.mjs      reachability analysis, tree shaking, v3 segment-level source maps
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
-test/fixtures/inspect.opuir.json  R4 inspector fixture
-test/fixtures/r6/*.js.fixture     real emitter outputs (web, mini programs, wasm host)
-test/r8.test.mjs      real loopback WebSocket sync tests (10)
-test/r10.test.mjs     R10 reachability, source maps, composition and size tests (8)
+test/fixtures/inspect.opuir.json  inspector fixture
+test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm host)
+test/sync.test.mjs    real loopback WebSocket sync tests (10)
+test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/*.test.mjs       node:test unit suite (88 tests)
 ```

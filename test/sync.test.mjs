@@ -7,7 +7,7 @@ import {
   DEFAULT_SYNC_CLIENTS, MAX_SYNC_CLIENTS, OPCODE, acceptKey, decodeFrame, encodeFrame,
   formatSyncReport, handshakeRequest, handshakeResponse, maskedTextFrame, parseClientCount,
   parseHandshakeResponse, parseUpgradeRequest, startLoopbackHub, verifySync,
-} from '../lib/r8.mjs';
+} from '../lib/sync.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
 

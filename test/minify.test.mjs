@@ -8,9 +8,9 @@ import { build, formatMeasuredBytes } from '../lib/build.mjs';
 import { tmpDir } from '../lib/paths.mjs';
 import {
   finalizeMinifiedBuild, formatSizeReport, minifyJs, parseTargetsOutput, sizeBytes, sizeReport,
-} from '../lib/r6.mjs';
+} from '../lib/minify.mjs';
 
-const FIXTURES = new URL('./fixtures/r6/', import.meta.url);
+const FIXTURES = new URL('./fixtures/emit/', import.meta.url);
 // Real outputs of the current emitters (opurom-spec/counter.opu on this host),
 // captured as fixtures so these tests need no sibling Rust repo.
 const TARGET_FIXTURES = [

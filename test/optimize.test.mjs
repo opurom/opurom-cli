@@ -8,13 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { flagEnabled, parseArgs } from '../lib/args.mjs';
 import { build } from '../lib/build.mjs';
 import { tmpDir } from '../lib/paths.mjs';
-import { finalizeBuild, formatSizeReport, sizeBytes, sizeReport } from '../lib/r6.mjs';
+import { finalizeBuild, formatSizeReport, sizeBytes, sizeReport } from '../lib/minify.mjs';
 import {
-  analyzeReachability, buildSourceMap, formatTreeShakeTable, R10_TRANSFORMS, treeShakeJs,
-} from '../lib/r10.mjs';
+  analyzeReachability, buildSourceMap, formatTreeShakeTable, ANALYZE_TRANSFORMS, treeShakeJs,
+} from '../lib/optimize.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
-const FIXTURES = new URL('./fixtures/r6/', import.meta.url);
+const FIXTURES = new URL('./fixtures/emit/', import.meta.url);
 const TARGET_FIXTURES = [
   'web-app.js.fixture', 'wechat-index.js.fixture', 'alipay-index.js.fixture', 'qq-index.js.fixture',
   'douyin-index.js.fixture', 'baidu-index.js.fixture', 'kuaishou-index.js.fixture', 'wasm-host.js.fixture',
@@ -108,7 +108,7 @@ async function withStubPath(binDir, fn) {
   }
 }
 
-test('R10 flags parse as booleans and are advertised in CLI help', () => {
+test('tree-shake, sourcemap and minify flags parse as booleans and are advertised in CLI help', () => {
   const { flags } = parseArgs(['build', '--tree-shake', '--sourcemap', '--minify', '--optimize=false']);
   assert.equal(flagEnabled(flags, 'tree-shake'), true);
   assert.equal(flagEnabled(flags, 'sourcemap'), true);
@@ -238,7 +238,7 @@ test('all 16 optimize/minify/tree-shake/sourcemap combinations compose', async (
   }
 });
 
-test('default build stays byte-identical and creates no R10 artifacts', async () => {
+test('default build stays byte-identical and creates no tree-shake artifacts', async () => {
   const { base, binDir, src } = stubWorkspace();
   try {
     await withStubPath(binDir, async () => {
@@ -277,7 +277,7 @@ test('tree shake reports exact functions/assets and size repeats the measurement
     const lines = [];
     const result = finalizeBuild({
       out, target: 'web', opuromc, minify: false, treeShake: true, sourcemap: false,
-      transforms: R10_TRANSFORMS, log: (line) => lines.push(String(line)),
+      transforms: ANALYZE_TRANSFORMS, log: (line) => lines.push(String(line)),
     });
     assert.deepEqual(result.removed.map((entry) => `${entry.name}:${entry.bytes}`), [
       'app.json:13', `index.js:${staleIndexBytes}`,

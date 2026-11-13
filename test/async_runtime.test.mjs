@@ -5,7 +5,7 @@ import test from 'node:test';
 import { tmpDir } from '../lib/paths.mjs';
 import {
   formatInspectTable, formatProfileReport, inspect, parseFrameCount, percentile, profileStats,
-} from '../lib/r4.mjs';
+} from '../lib/async_runtime.mjs';
 
 const FIXTURE_URL = new URL('./fixtures/inspect.opuir.json', import.meta.url);
 const A11Y = [
