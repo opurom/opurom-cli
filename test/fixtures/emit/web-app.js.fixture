@@ -16,12 +16,12 @@ function render() {
   ctx.fillStyle = "#334155";
   ctx.font = "14px sans-serif";
   ctx.fillText("", 32 + 6, 76 + 6);
-  ctx.fillStyle = "#4F46E5";
+  ctx.fillStyle = "#097FEB";
   ctx.fillRect(32, 76, 38, 32);
   ctx.fillStyle = "#ffffff";
   ctx.font = "16px sans-serif";
   ctx.fillText("-", 32 + 10, 76 + 8);
-  ctx.fillStyle = "#4F46E5";
+  ctx.fillStyle = "#097FEB";
   ctx.fillRect(78, 76, 38, 32);
   ctx.fillStyle = "#ffffff";
   ctx.font = "16px sans-serif";
