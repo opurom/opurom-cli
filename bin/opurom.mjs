@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { flagEnabled, parseArgs, parsePort, requireFlags } from '../lib/args.mjs';
 import { build, buildFull, buildWasm, check, migrate } from '../lib/build.mjs';
+import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
 import { runLintDocs } from '../lib/lint-docs.mjs';
@@ -31,6 +32,7 @@ Commands:
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target full --out <dir>
                                   frontend + service crate + migrations + shared types
+  verify --out <dir>              check the generated-artifact manifest of a full build
   size <dir>                      measured before/after byte table of a build
   serve --out <dir> [--port N]    run the generated service (OPR_PORT/OPR_DB)
   migrate --src <src.opu> --out <dir>
@@ -99,6 +101,12 @@ async function main(argv) {
         return 0;
       }
       build({ src, target, out, optimize, minify, treeShake, sourcemap });
+      return 0;
+    }
+    case 'verify': {
+      const { out } = requireFlags(flags, ['out']);
+      const manifest = verifyArtifactManifest(out);
+      console.log(`manifest ok: ${manifest.artifacts.length} artifacts, ${manifest.files.length} files`);
       return 0;
     }
     case 'size': {

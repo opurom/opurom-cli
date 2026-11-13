@@ -32,7 +32,8 @@ your shell and no npm packages are fetched.
 | `build --src <src.opu> --target <name> --out <dir> --tree-shake` | Tokenizes the emitter's own JS, computes top-level function reachability, removes unreachable declarations and unused generated assets, and prints exactly what was removed plus a `fs.statSync` before/after table. No bundler and no third-party dependency graph. |
 | `build --src <src.opu> --target <name> --out <dir> --sourcemap` | Emits a `<file>.js.map` Source Map v3 file for each generated JS file and appends `//# sourceMappingURL=<file>.js.map`. Mappings are generated line-start segments, honestly documented as **not line-exact or column-exact**. Composes with `--minify` and `--tree-shake`. |
 | `size <dir>` | Prints the measured before/after byte table and reduction percentage for a directory built with `--minify`, `--tree-shake` and/or `--sourcemap`. Every number comes from `fs.statSync` on the real files. |
-| `build --src <src.opu> --target full --out <dir>` | The whole full-stack chain in one command: compile → frontend (`web` + `native`) → generated server crate → SQL migrations → `shared/types.json`. Prints an artifact summary. |
+| `build --src <src.opu> --target full --out <dir>` | The whole full-stack chain in one command: compile → frontend (`web` + `native`) → generated server crate → SQL migrations → `shared/types.json`. Prints an artifact summary, writes `.opurom-manifest.json` and checks it before returning. |
+| `verify --out <dir>` | Checks the generated-artifact manifest: every listed artifact and file must exist, keep its recorded byte size and match its recorded SHA-256 digest. Exits 1 with the offending paths. |
 | `build --src <src.opu> --target wasm --out <dir>` | `opuromc target --target wasm` then `cargo build --release --target wasm32-unknown-unknown`. |
 | `serve --out <dir> [--port N]` | Runs the generated service (`OPR_PORT`, `OPR_DB`), waits for `GET /health`, streams the output, shuts down cleanly on `SIGINT`/`SIGTERM`. |
 | `migrate --src <src.opu> --out <dir>` | Compiles the source and writes `migrations/001_create_<model>.sql` + `schema.sql` from the IR models. |
@@ -138,11 +139,28 @@ What lands in `--out`:
 | `migrations/` | `001_create_todo.sql` (+ `schema.sql`) — SQL derived from the IR `models`. |
 | `shared/types.json` | The shared type source: the IR `models` and `api` arrays, read by both sides. |
 | `app.opuir.json` | The compiled IR — the single contract between the compiler and the backend. |
+| `.opurom-manifest.json` | Generated-artifact manifest: measured sizes and SHA-256 digests of the files above. |
 
 The chain is: `opuromc compile` → `opuromc target --target web|native` → `opurom-serverc`
 → `opurom-migrate`. Missing sibling binaries are built lazily with
 `cargo build --manifest-path <repo>/Cargo.toml`; a sibling repo that is genuinely absent is a
 hard error, never a silent success.
+
+#### Generated-artifact manifest
+
+`<out>/.opurom-manifest.json` lists the expected roots (`web`, `native`, `server`,
+`migrations`, `shared`, `app.opuir.json`) with measured file counts and byte sizes, plus a
+path-sorted list of every generated file with its measured byte size and SHA-256 digest.
+Build output written later by `cargo` under `target/` is excluded. The build checks the
+manifest immediately; the same check is available after the output is copied or edited:
+
+```sh
+node bin/opurom.mjs verify --out tmp/full
+```
+
+It prints `manifest ok: ...` on success. A missing manifest, a missing artifact, a changed
+byte size or a changed digest fails with a message naming the offending path and exits 1.
+Existing build, size and serve output is unchanged.
 
 ### 2. Serve it
 
@@ -379,7 +397,8 @@ These cover `lib/args.mjs` (flag parsing, target validation, port, boolean flags
 `lib/paths.mjs` (executable and sibling-binary discovery), `lib/targets.mjs` (emitter list
 parsed from the spec, build-target validation), `lib/build.mjs` (compile/lower/cargo
 orchestration plan, optimizer step, measured byte formatting, explicit fallback),
-`lib/fullstack.mjs` (full-build plan, shared types, artifact summary, temp-path guard),
+`lib/fullstack.mjs` (full-build plan, shared types, artifact summary, artifact manifest
+write/verify, temp-path guard),
 `lib/service.mjs` (env/port/db handling, service binary discovery), `lib/bench.mjs`
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
 (SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping),
@@ -796,7 +815,7 @@ lib/proc.mjs          spawnSync wrappers
 lib/doctor.mjs        toolchain report
 lib/init.mjs          scaffold
 lib/build.mjs         planBuild / measured optimize / check / build / buildFull / migrate / buildWasm
-lib/fullstack.mjs     full-build plan, shared types, artifact stats, wasm helpers
+lib/fullstack.mjs     full-build plan, shared types, artifact stats + manifest, wasm helpers
 lib/service.mjs       generated-service env, offline-first build, spawn, health wait
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart
