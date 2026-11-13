@@ -75,7 +75,7 @@ function drawNode(node) {
     ctx.fillStyle = node.color || "#111111";
     ctx.fillText(textOf(node.value || ""), x, y);
   } else if (node.kind === "Button") {
-    ctx.fillStyle = "#4F46E5";
+    ctx.fillStyle = "#097FEB";
     ctx.fillRect(x, y, w, h);
     ctx.fillStyle = "#ffffff";
     ctx.font = "16px sans-serif";
