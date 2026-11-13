@@ -12,7 +12,7 @@ import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
-import { inspect, profile } from '../lib/async_runtime.mjs';
+import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
@@ -42,13 +42,13 @@ Commands:
                                   --targets lowers 2+ targets from one IR and lists them
   dev --sync [--clients N] [--port N]
                                   verify N loopback WebSocket clients against a running sync hub
-  bench --src <src.opu> [--out <dir>] [--full]
+  bench --src <src.opu> [--out <dir>] [--full] [--json]
                                   measured compile/build times and artifact sizes
-  bench --src <src.opu> --compare
+  bench --src <src.opu> --compare [--json]
                                   measured software vs GPU backend times + byte equality
-  profile --src <src.opu> [--frames N]
+  profile --src <src.opu> [--frames N] [--json]
                                   measured software-raster frame timings (1..600)
-  profile --src <src.opu> --repeat N
+  profile --src <src.opu> --repeat N [--json]
                                   measured repeated runs, warmup excluded and reported (1..600)
   inspect <ir.json>               read-only layer + a11y trees side by side
   examples                        list registered example apps and their tests
@@ -144,19 +144,29 @@ async function main(argv) {
     }
     case 'bench': {
       const { src } = requireFlags(flags, ['src']);
+      const json = flagEnabled(flags, 'json');
       if (flagEnabled(flags, 'compare')) {
-        return compareBackends({ src });
+        return compareBackends({ src, json });
       }
       const out = typeof flags.out === 'string' ? flags.out : path.join('tmp', 'bench');
-      await bench({ src, out, full: flagEnabled(flags, 'full') });
-      return 0;
+      const full = flagEnabled(flags, 'full');
+      const result = await bench({ src, out, full, json });
+      if (!json) return 0;
+      console.log(machineReport({
+        command: 'bench',
+        mode: full ? 'full' : 'single',
+        samples: result.samples,
+        reason: result.samples.length ? null : 'no measurements',
+      }));
+      return result.samples.length ? 0 : 1;
     }
     case 'profile': {
       const { src } = requireFlags(flags, ['src']);
+      const json = flagEnabled(flags, 'json');
       if (flags.repeat !== undefined) {
-        return profileRepeat({ src, repeat: flags.repeat });
+        return profileRepeat({ src, repeat: flags.repeat, json });
       }
-      return profile({ src, frames: flags.frames });
+      return profile({ src, frames: flags.frames, json });
     }
     case 'inspect': {
       const ir = positionals[1];

@@ -41,11 +41,12 @@ your shell and no npm packages are fetched.
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
 | `dev --sync [--clients N] [--port N]` | One-shot sync verification: N real RFC 6455 WebSocket clients (default 2, cap 8) connect over loopback TCP to an already running sync hub, dispatch one state event and report MEASURED per-client delivery times plus same-delta equality. A missed delta is FAIL; no hub is a documented SKIP with `n/a (reason)`. |
 | `dev --src <src.opu> [--port N] --targets web,wechat` | Compiles once per rebuild and lowers two or more emitter targets from that one IR; serves each target under `/<target>/` and an index page at `/` that lists the targets with links to their entry files. Combines with `--sync`. |
-| `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
-| `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
-| `bench --src <src.opu> --compare` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
-| `profile --src <src.opu> [--frames N]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
-| `profile --src <src.opu> --repeat N` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
+| `bench --src <src.opu> [--out <dir>] [--full] [--json]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
+| `bench --src <src.opu> [--out <dir>] --full [--json]` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
+| `bench --src <src.opu> --compare [--json]` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
+| `profile --src <src.opu> [--frames N] [--json]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
+| `profile --src <src.opu> --repeat N [--json]` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
+| `<bench or profile command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
 | `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 | `lint-docs [dir]` | Scans Markdown under `dir` (default `.`) for publication red lines, skipping `.git`, `node_modules`, `target`, `tmp` and `dist`. Prints `file:line: rule: text` findings and a summary, and exits 1 on any finding; otherwise prints the scanned file count. |
@@ -745,6 +746,30 @@ software-raster timings on this host, **NOT a device/competitor benchmark**. The
 not report whether the machine was idle — that is not measurable from inside the CLI — so it
 states the host, the CPU, the OS and the raster kind instead of claiming an idle machine.
 
+## Machine-readable reports
+
+`--json` is accepted by `bench`, `bench --full`, `bench --compare`, `profile` and
+`profile --repeat`. It writes exactly one JSON object on stdout; the human-readable
+report is unchanged when the flag is absent. Tool progress lines are also suppressed
+so stdout remains parseable.
+
+Top-level keys are always written in this order: `command`, `mode`, `frames`,
+`p50`, `p95`, `min`, `max`, `unit`, `backends`, `byteEqual`, `reason`. `frames` is
+the count of real timing samples behind the statistics. `p50`, `p95`, `min`, and
+`max` are derived from those samples and are milliseconds; `unit` is always `ms`.
+`mode` is `single` for `bench` and `profile`, `full` for `bench --full`, `repeat`
+for `profile --repeat`, and `compare` for `bench --compare`.
+
+`backends` is empty except in `compare` mode, where it holds `software` and `gpu`
+objects in that order. Each backend object has the stable keys `name`, `frames`,
+`p50`, `p95`, `min`, `max`, `reason`. `byteEqual` is `true`, `false` or `null` when
+byte equality could not be checked. If no timing could be measured, the statistic
+fields are `null` and `reason` carries the cause. Invalid or non-finite samples
+make the report fail rather than substitute estimates.
+
+The CLI exit code still reports measurement availability. JSON mode does not add
+fps, startup, throughput, device or competitor claims.
+
 ## `inspect`: read-only layer and a11y trees
 
 ```sh
@@ -770,19 +795,21 @@ screen-reader integration.
   `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
   rebuild/restart + `--sync` preview hub + `--targets` multi-target preview from one IR),
   `dev --sync --clients N` (real N-client RFC 6455
-  loopback verification with measured delivery times), `bench` (default shape and measured
-  `--full` table), `bench --compare` (software vs GPU backend, both MEASURED, paired with the
-  byte-equality result), `profile` (measured sequential software-raster frames with honest `n/a`),
-  `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated),
+  loopback verification with measured delivery times), `bench` (default shape, measured
+  `--full` table and `--json` reports), `bench --compare` (software vs GPU backend, both MEASURED,
+  paired with the byte-equality result and a `--json` schema), `profile` (measured sequential
+  software-raster frames with honest `n/a` and `--json`),
+  `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated,
+  `--json`),
   `inspect` (read-only layer/a11y trees), `lint-docs` (publication checks for Markdown),
    `size` (measured before/after byte table), `examples`
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (111 tests)
+- `node --test`: the dependency-free unit suite (119 tests)
   passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
-  formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
+  formatting, the stable JSON schema, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
   `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
   comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
@@ -853,10 +880,10 @@ lib/fullstack.mjs     full-build plan, shared types, artifact stats + manifest, 
 lib/service.mjs       generated-service env, offline-first build, spawn, health wait
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart, multi-target preview
-lib/bench.mjs         measured timings + artifact sizes + bench --full table
-lib/async_runtime.mjs measured profile + read-only layer/a11y inspect
+lib/bench.mjs         measured timings + artifact sizes + bench --full table + JSON samples
+lib/async_runtime.mjs measured profile + JSON schema + read-only layer/a11y inspect
 lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size report
-lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality
+lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality + JSON
 lib/sync.mjs          RFC 6455 codec + loopback hub + N-client sync verification
 lib/optimize.mjs      reachability analysis, tree shaking, v3 segment-level source maps
 lib/examples.mjs      example registry, listing and ctest-style parallel test runner
@@ -867,5 +894,6 @@ test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/examples.test.mjs  example registry and runner tests (12)
-test/*.test.mjs       node:test unit suite (111 tests)
+test/bench-json.test.mjs  real-process JSON report tests (8)
+test/*.test.mjs       node:test unit suite (119 tests)
 ```
