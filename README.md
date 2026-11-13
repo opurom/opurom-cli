@@ -46,6 +46,7 @@ your shell and no npm packages are fetched.
 | `profile --src <src.opu> --repeat N` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
+| `lint-docs [dir]` | Scans Markdown under `dir` (default `.`) for publication red lines, skipping `.git`, `node_modules`, `target`, `tmp` and `dist`. Prints `file:line: rule: text` findings and a summary, and exits 1 on any finding; otherwise prints the scanned file count. |
 | `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
 | `test --examples [--filter <name>] [--jobs N] [--verbose]` | Runs the registered example tests ctest-style: one `PASS` / `FAIL` / `SKIP` line per test, then `tests passed: X, failed: Y, skipped: Z, time N.Ns` and the failed test ids; exits 1 on any failure. Tests of one app run in registry order (render consumes the IR its compile test wrote); apps run in parallel, `--jobs` defaults to min(4, cpus). A missing source marked `required: false` is a SKIP with the reason; a missing `required: true` source is a FAIL. Commands use `{source}` / `{tmp}` placeholders and the `opuromc`, `opurom-render`, `node` tool aliases, so no machine-specific paths are stored in the registry. |
 
@@ -434,7 +435,7 @@ check:
 If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), that check prints
 **SKIP** with the reason instead of a false pass. A build failure, a wrong IR, invalid
 generated JS, a failing API call or a missing binary is a real **FAIL** with a diagnostic.
-Check 6 needs `cargo` on `PATH` (or `$HOME/.cargo/bin`).
+Check 6 needs `cargo` on `PATH`.
 
 ## `dev`: HTTP + SSE hot reload, backend rebuild
 
@@ -463,7 +464,7 @@ snapshot as `window.__OPUROM_STATE_RESTORE__` on the next load. Because the v0.1
 keeps `const state` in its own script scope, `dev` also applies a **dev-only** rewrite to the
 served `app.js` (never to the generated artifact on disk outside `tmp/`): merge the snapshot
 into the state initializer and expose the live state as `window.opurom.state` for the next
-reload — state-preserving reload that actually works with the round-1 emitter. Static files
+reload — state-preserving reload for the v0.1 web emitter. Static files
 are served from a temp dir under `tmp/` (gitignored), with a path-traversal guard.
 `SIGINT`/`SIGTERM` close the watcher, clients, backend child and server, and remove the temp
 output.
@@ -722,11 +723,12 @@ screen-reader integration.
   `--full` table), `bench --compare` (software vs GPU backend, both MEASURED, paired with the
   byte-equality result), `profile` (measured sequential software-raster frames with honest `n/a`),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated),
-  `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `examples`
+  `inspect` (read-only layer/a11y trees), `lint-docs` (publication checks for Markdown),
+   `size` (measured before/after byte table), `examples`
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (100 tests)
+- `node --test`: the dependency-free unit suite (103 tests)
   passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
@@ -734,8 +736,8 @@ screen-reader integration.
   comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
-  flag matrix, default byte identity, exact removal reports and measured size math.
-- `node bin/opurom.mjs test`: 10 checks PASS at commit time — the 7 round-1 checks, the
+  flag matrix, default byte identity, exact removal reports, measured size math and publication checks.
+- `node bin/opurom.mjs test`: 10 checks PASS at commit time — the seven core checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
   `WebAssembly.instantiate` + `opu_version() == 1`) and the minified-build check

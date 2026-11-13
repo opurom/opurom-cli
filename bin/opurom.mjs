@@ -4,6 +4,7 @@ import { flagEnabled, parseArgs, parsePort, requireFlags } from '../lib/args.mjs
 import { build, buildFull, buildWasm, check, migrate } from '../lib/build.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
+import { runLintDocs } from '../lib/lint-docs.mjs';
 import { init } from '../lib/init.mjs';
 import { specFile } from '../lib/paths.mjs';
 import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
@@ -51,6 +52,7 @@ Commands:
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
                                   run registered example tests ctest-style
+  lint-docs [dir]                 check published Markdown for red lines
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
 
@@ -167,6 +169,8 @@ async function main(argv) {
       }
       console.log('OPUROM end-to-end tests');
       return (await runE2e()).exitCode;
+    case 'lint-docs':
+      return runLintDocs({ root: positionals[1] ?? '.' });
     default:
       throw new Error(`unknown command: ${command}\n\n${USAGE}`);
   }
