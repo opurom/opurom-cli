@@ -14,6 +14,7 @@ import { inspect, profile } from '../lib/async_runtime.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
+import { examplesList, runExampleTests } from '../lib/examples.mjs';
 
 const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 
@@ -46,7 +47,10 @@ Commands:
   profile --src <src.opu> --repeat N
                                   measured repeated runs, warmup excluded and reported (1..600)
   inspect <ir.json>               read-only layer + a11y trees side by side
+  examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
+  test --examples [--filter <name>] [--jobs N] [--verbose]
+                                  run registered example tests ctest-style
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
 
@@ -148,7 +152,19 @@ async function main(argv) {
       if (!ir) throw new Error('usage: inspect <ir.json>');
       return inspect({ ir });
     }
+    case 'examples':
+      examplesList();
+      return 0;
     case 'test':
+      if (flagEnabled(flags, 'examples')) {
+        if (flags.filter === true) throw new Error('--filter requires a name');
+        const { exitCode } = await runExampleTests({
+          filter: typeof flags.filter === 'string' ? flags.filter : undefined,
+          jobs: flags.jobs,
+          verbose: flagEnabled(flags, 'verbose'),
+        });
+        return exitCode;
+      }
       console.log('OPUROM end-to-end tests');
       return (await runE2e()).exitCode;
     default:
