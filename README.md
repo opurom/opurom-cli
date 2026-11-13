@@ -504,7 +504,9 @@ snapshot as `window.__OPUROM_STATE_RESTORE__` on the next load. Because the v0.1
 keeps `const state` in its own script scope, `dev` also applies a **dev-only** rewrite to the
 served `app.js` (never to the generated artifact on disk outside `tmp/`): merge the snapshot
 into the state initializer and expose the live state as `window.opurom.state` for the next
-reload — state-preserving reload for the v0.1 web emitter. Static files
+reload — state-preserving reload for the v0.1 web emitter. The responsive `web-dom` page
+restores and re-renders from the same snapshot inside its own script instead of using an
+`app.js` rewrite, so both preview paths preserve state across a reload. Static files
 are served from a temp dir under `tmp/` (gitignored), with a path-traversal guard.
 `SIGINT`/`SIGTERM` close the watcher, clients, backend child and server, and remove the temp
 output.
@@ -608,9 +610,11 @@ broadcasts one `reload` frame after all listed targets are rebuilt.
 
 `web-dom` is the default dev preview. Its emitted `index.html` carries a viewport meta tag,
 five `@media` breakpoints and DOM UI nodes. The dev server injects the SSE client into that
-page, so a source change still broadcasts a reload. The `app.js` state-preserving rewrite
-belongs to the `web` canvas emitter, so `web-dom` reloads without state restore; the dev log
-states this and `/health` lists the targets receiving the rewrite in `stateRestore`.
+page, so a source change still broadcasts a reload. The page owns a small state runtime: it
+restores the `opurom.state` `sessionStorage` snapshot over the IR's initial values, re-renders
+the bound nodes from the live state, and writes edited values back to the snapshot, so a save
+reloads the page with its current state. `/health` lists the targets receiving the snapshot in
+`stateRestore`.
 
 ## `bench`: measured numbers only
 

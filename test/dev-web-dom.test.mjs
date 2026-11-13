@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { tmpDir } from '../lib/paths.mjs';
-import { dev } from '../lib/dev.mjs';
+import { dev, devClientScript } from '../lib/dev.mjs';
 
 // Self-contained stub: web-dom emits one responsive index.html and no app.js,
 // the legacy web emitter emits a fixed canvas plus app.js, other emitters get
@@ -64,7 +64,7 @@ test('default dev preview is the responsive web-dom page with SSE hot reload', {
     const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
     const health = await (await fetch(`${baseUrl}/health`)).json();
     assert.deepEqual(health.targets, ['web-dom']);
-    assert.deepEqual(health.stateRestore, []);
+    assert.deepEqual(health.stateRestore, ['web-dom']);
     assert.equal(health.rebuilds, 1);
 
     const page = await fetch(baseUrl);
@@ -74,10 +74,12 @@ test('default dev preview is the responsive web-dom page with SSE hot reload', {
     assert.match(html, /@media/);
     assert.match(html, /data-node-id=/);
     assert.match(html, /__opurom\/events/, 'the dev SSE client must be injected');
+    assert.match(html, /sessionStorage/, 'the page must read/write the state snapshot');
+    assert.match(html, /__OPUROM_STATE_RESTORE__/, 'the page must restore the snapshot on load');
     assert.doesNotMatch(html, /width="800" height="600"/, 'the fixed canvas is not the default page');
     assert.equal((await fetch(`${baseUrl}/app.js`)).status, 404, 'web-dom emits no app.js');
-    assert.ok(logs.some((line) => /web-dom: SSE hot reload; state restore is not applied/.test(line)),
-      'the dev log must state that state restore is not applied to web-dom');
+    assert.ok(logs.some((line) => /web-dom: SSE hot reload; state snapshot restored/.test(line)),
+      'the dev log must state that web-dom restores a state snapshot');
 
     // Hot reload still works: a source change broadcasts a reload frame.
     controller = new AbortController();
@@ -150,7 +152,7 @@ test('dev --targets web-dom,web serves both pages and patches only web', { timeo
     const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
     const health = await (await fetch(`${baseUrl}/health`)).json();
     assert.deepEqual(health.targets, ['web-dom', 'web']);
-    assert.deepEqual(health.stateRestore, ['web']);
+    assert.deepEqual(health.stateRestore, ['web-dom', 'web']);
     const index = await (await fetch(baseUrl)).text();
     assert.match(index, /href="\/web-dom\/index\.html">web-dom<\/a>/);
     assert.match(index, /href="\/web\/index\.html">web<\/a>/);
@@ -187,4 +189,30 @@ test('dev --targets web,wechat still lowers two emitters from one IR', { timeout
     if (handle) await handle.close();
     env.restore();
   }
+});
+
+test('web-dom hot reload writes the edited state to the session snapshot before reloading', () => {
+  const body = devClientScript().replace(/^<script>/, '').replace(/<\/script>$/, '');
+  const writes = [];
+  const store = new Map();
+  const storage = {
+    getItem: (key) => (store.has(key) ? store.get(key) : null),
+    setItem: (key, value) => { store.set(key, value); writes.push(value); },
+  };
+  const listeners = {};
+  const events = {
+    addEventListener(type, handler) { (listeners[type] ??= []).push(handler); },
+  };
+  const EventSource = function () { return events; };
+  const reloads = [];
+  const window = {};
+  const run = new Function('window', 'sessionStorage', 'EventSource', 'location', `${body};`);
+  run(window, storage, EventSource, { reload: () => reloads.push('reload') });
+
+  // The responsive DOM page's state runtime exposes the live, edited state.
+  window.opurom = { state: { count: 5 } };
+  for (const handler of listeners.reload) handler();
+
+  assert.equal(reloads.length, 1, 'a source save reloads the page');
+  assert.deepEqual(JSON.parse(writes.at(-1)), { count: 5 }, 'the edited state is written before the reload');
 });
