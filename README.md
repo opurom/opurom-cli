@@ -718,7 +718,10 @@ node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --frames 30
 The command compiles the `.opu` source once, then launches `opurom-render` once per requested
 frame at 800x600 and times each real process with `performance.now()`. It reports MEASURED
 p50/p95/min/max milliseconds and achieved fps computed as
-`frames / sum(measured frame times)`. Every frame is checked for renderer `digest=` / `dirty=`
+`frames / sum(measured frame times)`. The report also states the renderer process's peak
+resident set size and user+system CPU time, measured with the host's `/usr/bin/time` (`-l` on
+macOS, `-v` on Linux, falling back to a `ps`-poll when it is absent) and reported as `n/a
+(reason)` when the host exposes neither value. Every frame is checked for renderer `digest=` / `dirty=`
 output and a non-empty PPM. `--frames` defaults to 30 and accepts 1..600; values outside that
 range fail with a clear error. If a tool or any frame is unavailable, every statistic prints
 `n/a (reason)` and the command exits nonzero. No number is invented.
@@ -783,11 +786,18 @@ report is unchanged when the flag is absent. Tool progress lines are also suppre
 so stdout remains parseable.
 
 Top-level keys are always written in this order: `command`, `mode`, `frames`,
-`p50`, `p95`, `min`, `max`, `unit`, `backends`, `byteEqual`, `reason`. `frames` is
+`p50`, `p95`, `min`, `max`, `unit`, `memory`, `cpu`, `backends`, `byteEqual`,
+`reason`. `frames` is
 the count of real timing samples behind the statistics. `p50`, `p95`, `min`, and
 `max` are derived from those samples and are milliseconds; `unit` is always `ms`.
 `mode` is `single` for `bench` and `profile`, `full` for `bench --full`, `repeat`
 for `profile --repeat`, and `compare` for `bench --compare`.
+
+`memory` and `cpu` describe the renderer process of the measured runs. `memory`
+has the keys `peakRssKb`, `peakRssMb` and `reason`; `cpu` has `userMs`,
+`systemMs`, `totalMs`, `maxTotalMs` and `reason`. A command that does not measure
+the renderer process leaves both metric objects with `null` values and a `reason`;
+the profile commands fill them from the measured runs.
 
 `backends` is empty except in `compare` mode, where it holds `software` and `gpu`
 objects in that order. Each backend object has the stable keys `name`, `frames`,

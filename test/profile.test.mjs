@@ -3,12 +3,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { tmpDir } from '../lib/paths.mjs';
-import { percentile } from '../lib/async_runtime.mjs';
+import { percentile, profile } from '../lib/async_runtime.mjs';
 import {
   DEFAULT_REPEAT, DEFAULT_WARMUP, MAX_REPEAT, compareBackends, environmentDescription,
   formatCompareReport, formatEnvironment, formatRepeatReport, measuredRuns, parseRepeatCount,
   profileRepeat, repeatStats, warmupFor,
 } from '../lib/profile.mjs';
+import {
+  aggregateResources, measureRendererResources, parseCpuTime, parsePsMetrics, parseTimeReport,
+} from '../lib/process-metrics.mjs';
 
 const COMPILER_STUB = `#!/bin/sh
 printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[],"tree":{},"theme":{}}' > "$4"
@@ -290,4 +293,131 @@ test('the compare report never prints a speed ratio over outputs that are not by
   });
   assert.match(report, /speed: n\/a \(outputs are not byte-equal/);
   assert.equal(/speed: gpu is/.test(report), false);
+});
+
+test('parseTimeReport reads BSD and GNU time reports into RSS and CPU milliseconds', () => {
+  // BSD reports RSS in bytes; it is normalized to kB here.
+  const bsd = parseTimeReport(
+    '        0.05 real         0.03 user         0.02 sys\n  2080768  maximum resident set size\n',
+    'bsd',
+  );
+  assert.equal(bsd.peakRssKb, 2080768 / 1024);
+  assert.equal(bsd.cpuUserMs, 30);
+  assert.equal(bsd.cpuSystemMs, 20);
+
+  const gnu = parseTimeReport(
+    'Maximum resident set size (kbytes): 1048576\nUser time (seconds): 0.5\nSystem time (seconds): 0.25\n',
+    'gnu',
+  );
+  assert.equal(gnu.peakRssKb, 1048576);
+  assert.equal(gnu.cpuUserMs, 500);
+  assert.equal(gnu.cpuSystemMs, 250);
+});
+
+test('parsePsMetrics reads the poller marker and parseCpuTime handles both clock forms', () => {
+  assert.equal(parseCpuTime('0:00.01'), 10);
+  assert.equal(parseCpuTime('1:00.25'), 60250);
+  assert.equal(parseCpuTime('01:23.45'), 83450);
+  assert.equal(parseCpuTime('1:02:03.5'), 3723500);
+  assert.equal(parseCpuTime('nope'), null);
+  const parsed = parsePsMetrics('__OPUROM_METRICS__ rss=2080 cpu=0:00.02\n');
+  assert.equal(parsed.peakRssKb, 2080);
+  assert.equal(parsed.cpuTotalMs, 20);
+  assert.equal(parsed.cpuUserMs, null, 'ps has no user/sys split');
+  assert.equal(parsePsMetrics('no marker here'), null);
+});
+
+test('aggregateResources reports the peak RSS and total/max CPU, or an honest reason', () => {
+  const resources = aggregateResources([
+    { peakRssKb: 1000, cpuUserMs: 5, cpuSystemMs: 1, cpuTotalMs: 6, reason: null },
+    { peakRssKb: 2000, cpuUserMs: 7, cpuSystemMs: 3, cpuTotalMs: 10, reason: null },
+  ]);
+  assert.equal(resources.memory.peakRssKb, 2000);
+  assert.equal(resources.memory.peakRssMb, 1.95);
+  assert.equal(resources.memory.reason, null);
+  assert.equal(resources.cpu.userMs, 12);
+  assert.equal(resources.cpu.systemMs, 4);
+  assert.equal(resources.cpu.totalMs, 16);
+  assert.equal(resources.cpu.maxTotalMs, 10);
+  assert.equal(resources.cpu.reason, null);
+
+  const missing = aggregateResources([{ peakRssKb: null, reason: 'time -l unusable' }]);
+  assert.equal(missing.memory.peakRssKb, null);
+  assert.equal(missing.memory.peakRssMb, null);
+  assert.equal(missing.memory.reason, 'time -l unusable');
+  assert.equal(missing.cpu.totalMs, null);
+  assert.equal(missing.cpu.reason, 'time -l unusable');
+
+  assert.equal(aggregateResources([]).memory.reason, 'no measured render runs');
+});
+
+test('the ps poll fallback measures the renderer when no time binary is available', (t) => {
+  const base = tmpDir('profile-ps-fallback-');
+  try {
+    const renderer = path.join(base, 'opurom-render');
+    fs.writeFileSync(renderer, RENDERER_STUB, { mode: 0o755 });
+    const irFile = path.join(base, 'app.opuir.json');
+    fs.writeFileSync(irFile, '{}');
+    const frame = path.join(base, 'frame.ppm');
+    const { result, resource } = measureRendererResources({
+      renderBin: renderer, args: [irFile, '800', '600', frame],
+      time: { path: null, variant: null, reason: 'no time binary' },
+    });
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+    assert.match(`${result.stdout}${result.stderr}`, /^digest=/m);
+    if (resource.mechanism === 'ps-poll') {
+      assert.equal(resource.reason, null);
+      assert.ok(Number.isFinite(resource.peakRssKb) && resource.peakRssKb >= 0);
+      assert.ok(Number.isFinite(resource.cpuTotalMs) && resource.cpuTotalMs >= 0);
+    } else {
+      assert.equal(resource.mechanism, null);
+      assert.equal(typeof resource.reason, 'string');
+    }
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('the profile report carries memory and CPU, or the honest unavailable reason', (t) => {
+  const base = tmpDir('profile-resources-');
+  try {
+    const compiler = path.join(base, 'opuromc');
+    fs.writeFileSync(compiler, COMPILER_STUB, { mode: 0o755 });
+    const renderer = path.join(base, 'opurom-render');
+    fs.writeFileSync(renderer, RENDERER_STUB, { mode: 0o755 });
+    const src = path.join(base, 'main.opu');
+    fs.writeFileSync(src, 'app Counter { state count = 0 }\n');
+
+    const lines = [];
+    const code = profile({
+      src, frames: 3, compiler, renderer, json: true, log: (line) => lines.push(String(line)),
+    });
+    assert.equal(code, 0, lines.join('\n'));
+    const json = JSON.parse(lines.join('\n'));
+    assert.deepEqual(Object.keys(json), [
+      'command', 'mode', 'frames', 'p50', 'p95', 'min', 'max', 'unit',
+      'memory', 'cpu', 'backends', 'byteEqual', 'reason',
+    ]);
+    for (const key of ['peakRssKb', 'peakRssMb']) {
+      assert.ok(json.memory[key] === null || (Number.isFinite(json.memory[key]) && json.memory[key] >= 0),
+        `memory.${key}`);
+    }
+    for (const key of ['userMs', 'systemMs', 'totalMs', 'maxTotalMs']) {
+      assert.ok(json.cpu[key] === null || (Number.isFinite(json.cpu[key]) && json.cpu[key] >= 0),
+        `cpu.${key}`);
+    }
+    assert.ok(json.memory.reason === null || typeof json.memory.reason === 'string');
+    assert.ok(json.cpu.reason === null || typeof json.cpu.reason === 'string');
+
+    // The human report names both metrics.
+    const textLines = [];
+    profile({
+      src, frames: 3, compiler, renderer, json: false, log: (line) => textLines.push(String(line)),
+    });
+    const text = textLines.join('\n');
+    assert.match(text, /memory \(renderer peak RSS\):/);
+    assert.match(text, /cpu \(renderer user\+sys\):/);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });

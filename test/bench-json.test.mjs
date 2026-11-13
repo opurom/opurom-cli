@@ -11,10 +11,12 @@ import {
 import {
   formatProfileReport, machineBackend, machineReport, measureRenderRuns, profileStats,
 } from '../lib/async_runtime.mjs';
+import { unavailableCpu, unavailableMemory } from '../lib/process-metrics.mjs';
 
 const SOURCE_CLI_ROOT = fileURLToPath(new URL('../', import.meta.url));
 const TOP_KEYS = [
-  'command', 'mode', 'frames', 'p50', 'p95', 'min', 'max', 'unit', 'backends', 'byteEqual', 'reason',
+  'command', 'mode', 'frames', 'p50', 'p95', 'min', 'max', 'unit', 'memory', 'cpu',
+  'backends', 'byteEqual', 'reason',
 ];
 const BACKEND_KEYS = ['name', 'frames', 'p50', 'p95', 'min', 'max', 'reason'];
 const STATS_KEYS = ['p50', 'p95', 'min', 'max'];
@@ -106,6 +108,16 @@ function assertSchema(json, command, mode) {
   assert.ok(Array.isArray(json.backends));
   assert.ok(json.byteEqual === null || typeof json.byteEqual === 'boolean');
   assert.ok(json.reason === null || typeof json.reason === 'string');
+  assert.deepEqual(Object.keys(json.memory), ['peakRssKb', 'peakRssMb', 'reason']);
+  assert.deepEqual(Object.keys(json.cpu), ['userMs', 'systemMs', 'totalMs', 'maxTotalMs', 'reason']);
+  for (const key of ['peakRssKb', 'peakRssMb']) {
+    assert.ok(json.memory[key] === null || (Number.isFinite(json.memory[key]) && json.memory[key] >= 0));
+  }
+  for (const key of ['userMs', 'systemMs', 'totalMs', 'maxTotalMs']) {
+    assert.ok(json.cpu[key] === null || (Number.isFinite(json.cpu[key]) && json.cpu[key] >= 0));
+  }
+  assert.ok(json.memory.reason === null || typeof json.memory.reason === 'string');
+  assert.ok(json.cpu.reason === null || typeof json.cpu.reason === 'string');
   if (json.frames === 0) {
     for (const key of STATS_KEYS) assert.equal(json[key], null);
   } else {
@@ -189,6 +201,8 @@ test('machine reports derive statistics from real renderer samples and reject in
 test('human-readable profile and compare reports stay byte-identical without --json', () => {
   const profile = formatProfileReport({
     src: '/a/main.opu', frames: 4, stats: profileStats([10, 20, 30, 40]), reason: null,
+    memory: unavailableMemory('renderer resource measurement unavailable'),
+    cpu: unavailableCpu('renderer resource measurement unavailable'),
   });
   assert.equal(profile, [
     'OPUROM profile (MEASURED software-raster timings on this host)',
@@ -199,6 +213,8 @@ test('human-readable profile and compare reports stay byte-identical without --j
     'min: 10 ms',
     'max: 40 ms',
     'achieved fps: 40 (4 frames / 100 ms of measured frame time)',
+    'memory (renderer peak RSS): n/a (renderer resource measurement unavailable)',
+    'cpu (renderer user+sys): n/a (renderer resource measurement unavailable)',
     'Note: software-raster timings on this host, NOT a device/competitor benchmark. No GPU/device matrix is measured.',
   ].join('\n'));
 
