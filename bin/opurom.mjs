@@ -31,6 +31,8 @@ Commands:
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
+  build --src <src.opu> --target web-dom --out <dir>
+                                  responsive DOM page that reflows on browser resize
   build --project <dir> --target <name> --out <dir>
                                   build <dir>/main.opu with its imports resolved
   build --src <src.opu> --target full --out <dir>
