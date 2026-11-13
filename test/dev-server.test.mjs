@@ -29,7 +29,8 @@ test('dev server serves injected html, health, and an SSE reload on source chang
   let handle;
   let controller;
   try {
-    handle = await dev({ src, port: 0, root: base, signals: false, log: () => {} });
+    // The legacy web canvas page keeps the state-preserving app.js rewrite.
+    handle = await dev({ src, port: 0, root: base, signals: false, log: () => {}, targets: ['web'] });
     const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
     const health = await (await fetch(`${baseUrl}/health`)).json();
     assert.equal(health.ok, true);

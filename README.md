@@ -585,8 +585,9 @@ curl -s http://127.0.0.1:5178/web/index.html
 curl -s http://127.0.0.1:5178/wechat/app.js
 ```
 
-`--targets` accepts a comma-separated list of the eight emitter targets (`native`, `web`,
-`wechat`, `alipay`, `qq`, `douyin`, `baidu`, `kuaishou`). Each rebuild compiles the source
+`--targets` accepts a comma-separated list of nine dev targets: the eight emitter targets
+(`native`, `web`, `wechat`, `alipay`, `qq`, `douyin`, `baidu`, `kuaishou`) plus `web-dom`.
+Each rebuild compiles the source
 once and lowers every listed target from that one IR into its own subdirectory of the dev
 output, so the previews show one compiled program instead of per-target recompiles that
 could drift apart. The dev server serves each target under `/<target>/` and an index page at
@@ -598,12 +599,18 @@ source change rebuilds every listed target from one fresh compile and broadcasts
 `reload` frame to every connected client. `/health` reports the target list in a `targets`
 field.
 
-`--targets` accepts emitter targets only: `full` and `wasm` drive cargo builds and are
+`--targets` accepts dev targets only: `full` and `wasm` drive cargo builds and are
 rejected with `invalid --targets: <name> (expected one of native, web, ...)` before the
-server starts. Without `--targets`, `dev` behaves exactly as before and serves the `web`
-target from the output root. `--targets` combines with `--sync`: the preview hub serves the
-same listing page to every connected browser client, and a source change broadcasts one
-`reload` frame after all listed targets are rebuilt.
+server starts. Without `--targets`, `dev` serves `web-dom` from the output root; `web`
+remains available through `--targets web`. `--targets` combines with `--sync`: the preview
+hub serves the same listing page to every connected browser client, and a source change
+broadcasts one `reload` frame after all listed targets are rebuilt.
+
+`web-dom` is the default dev preview. Its emitted `index.html` carries a viewport meta tag,
+five `@media` breakpoints and DOM UI nodes. The dev server injects the SSE client into that
+page, so a source change still broadcasts a reload. The `app.js` state-preserving rewrite
+belongs to the `web` canvas emitter, so `web-dom` reloads without state restore; the dev log
+states this and `/health` lists the targets receiving the rewrite in `stateRestore`.
 
 ## `bench`: measured numbers only
 
@@ -917,5 +924,5 @@ test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
 test/doctor.test.mjs   toolchain report tests (3)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (128 tests)
+test/*.test.mjs       node:test unit suite (133 tests)
 ```
