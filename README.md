@@ -24,7 +24,7 @@ your shell and no npm packages are fetched.
 | --- | --- |
 | `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
 | `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the spec). |
-| `init <dir>` | Scaffolds `opurom.json` (name + targets), `src/main.opu` (from the counter template), `README.md`, `.gitignore`. Refuses to overwrite a non-empty directory. |
+| `init <dir> [--template counter\|particles]` | Scaffolds `opurom.json` (name + targets), a starter screen (`src/main.opu` from the counter template by default; `--template particles` writes `src/particles.opu` with a seeded particle field and a spring animation), `README.md`, `.gitignore`. Refuses to overwrite a non-empty directory. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build --src <src.opu> --target <name> --out <dir> --optimize` | Runs `opuromc optimize <ir> -o <optimized-ir>` before every emitter, prints measured input/output byte sizes and falls back to the original IR with an explicit message if the compiler cannot optimize. Default builds are unchanged. |
@@ -60,6 +60,8 @@ cli doctor
 cli targets
 cli init tmp/demo
 cli check tmp/demo/src/main.opu
+cli init tmp/field --template particles
+cli check tmp/field/src/particles.opu
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-opt --optimize
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-min --minify
