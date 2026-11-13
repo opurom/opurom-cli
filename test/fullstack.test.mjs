@@ -17,10 +17,11 @@ import { CLI_ROOT, tmpDir } from '../lib/paths.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
 
-test('validateBuildTarget accepts emitters plus full and wasm', () => {
-  assert.deepEqual([...BUILD_TARGETS].sort(), ['alipay', 'baidu', 'douyin', 'full', 'kuaishou', 'native', 'qq', 'wasm', 'web', 'wechat']);
+test('validateBuildTarget accepts emitters plus web-dom, full and wasm', () => {
+  assert.deepEqual([...BUILD_TARGETS].sort(), ['alipay', 'baidu', 'douyin', 'full', 'kuaishou', 'native', 'qq', 'wasm', 'web', 'web-dom', 'wechat']);
   assert.equal(validateBuildTarget('full'), 'full');
   assert.equal(validateBuildTarget('wasm'), 'wasm');
+  assert.equal(validateBuildTarget('web-dom'), 'web-dom');
   assert.throws(() => validateBuildTarget('wasm32'), /unknown target/);
 });
 
