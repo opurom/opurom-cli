@@ -40,6 +40,7 @@ your shell and no npm packages are fetched.
 | `dev --src <src.opu> [--port N]` | Serves the generated `web` output over HTTP with SSE hot reload **and** rebuilds/restarts the backend service when the source changes (details below). |
 | `dev --src <src.opu> [--port N] --sync` | Adds a dev preview sync hub for N browser clients: one shared state snapshot on connect and the same reload frame for every SSE client. Not a device-conformance or multi-OS claim. |
 | `dev --sync [--clients N] [--port N]` | One-shot sync verification: N real RFC 6455 WebSocket clients (default 2, cap 8) connect over loopback TCP to an already running sync hub, dispatch one state event and report MEASURED per-client delivery times plus same-delta equality. A missed delta is FAIL; no hub is a documented SKIP with `n/a (reason)`. |
+| `dev --src <src.opu> [--port N] --targets web,wechat` | Compiles once per rebuild and lowers two or more emitter targets from that one IR; serves each target under `/<target>/` and an index page at `/` that lists the targets with links to their entry files. Combines with `--sync`. |
 | `bench --src <src.opu> [--out <dir>]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
@@ -74,6 +75,7 @@ cli profile --src ../opurom-spec/counter.opu --repeat 10
 cli inspect ../opurom-spec/counter.opuir.json
 # Long-running: cli dev --src tmp/demo/src/main.opu --sync --port 5178
 # Start a hub first, then: cli dev --sync --clients 8 --port 5178
+# Long-running: cli dev --src tmp/demo/src/main.opu --targets web,wechat --port 5179
 cli test
 ```
 
@@ -555,6 +557,35 @@ rule. There are no extensions, no subprotocol negotiation, no TLS and no authent
 The sync hub verifies **loopback clients on one host**. The command verifies the sync path
 itself: the delta delivery, the measured timings and the socket cleanup.
 
+## `dev --targets`: several target previews from one IR
+
+```sh
+node bin/opurom.mjs dev --src tmp/dev-demo.opu --targets web,wechat --port 5178
+curl -s http://127.0.0.1:5178/          # index page listing the targets with links
+curl -s http://127.0.0.1:5178/web/index.html
+curl -s http://127.0.0.1:5178/wechat/app.js
+```
+
+`--targets` accepts a comma-separated list of the eight emitter targets (`native`, `web`,
+`wechat`, `alipay`, `qq`, `douyin`, `baidu`, `kuaishou`). Each rebuild compiles the source
+once and lowers every listed target from that one IR into its own subdirectory of the dev
+output, so the previews show one compiled program instead of per-target recompiles that
+could drift apart. The dev server serves each target under `/<target>/` and an index page at
+`/` that lists the targets with a link to each target's entry file (the target's
+`index.html` when the emitter writes one, otherwise its first emitted file). The injected
+SSE client is added to the index page and to each target's emitted `index.html`; the `web`
+target keeps the state-preserving reload rewrite, other targets receive no state rewrite. A
+source change rebuilds every listed target from one fresh compile and broadcasts the same
+`reload` frame to every connected client. `/health` reports the target list in a `targets`
+field.
+
+`--targets` accepts emitter targets only: `full` and `wasm` drive cargo builds and are
+rejected with `invalid --targets: <name> (expected one of native, web, ...)` before the
+server starts. Without `--targets`, `dev` behaves exactly as before and serves the `web`
+target from the output root. `--targets` combines with `--sync`: the preview hub serves the
+same listing page to every connected browser client, and a source change broadcasts one
+`reload` frame after all listed targets are rebuilt.
+
 ## `bench`: measured numbers only
 
 ```sh
@@ -737,7 +768,8 @@ screen-reader integration.
   `init`, `check`, `build` (emitter, `full`, `wasm`, opt-in `--optimize`, `--minify`,
   `--tree-shake`, `--sourcemap`, all composing),
   `serve`, `migrate`, `dev` (HTTP + SSE + fs.watch + state-preserving reload + backend
-  rebuild/restart + `--sync` preview hub), `dev --sync --clients N` (real N-client RFC 6455
+  rebuild/restart + `--sync` preview hub + `--targets` multi-target preview from one IR),
+  `dev --sync --clients N` (real N-client RFC 6455
   loopback verification with measured delivery times), `bench` (default shape and measured
   `--full` table), `bench --compare` (software vs GPU backend, both MEASURED, paired with the
   byte-equality result), `profile` (measured sequential software-raster frames with honest `n/a`),
@@ -747,7 +779,7 @@ screen-reader integration.
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (103 tests)
+- `node --test`: the dependency-free unit suite (111 tests)
   passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
@@ -755,7 +787,9 @@ screen-reader integration.
   comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
-  flag matrix, default byte identity, exact removal reports, measured size math and publication checks.
+  flag matrix, default byte identity, exact removal reports, measured size math, the
+  `dev --targets` parser, the target listing page, a multi-target dev server run against a
+  stub compiler and publication checks.
 - `node bin/opurom.mjs test`: 10 checks PASS at commit time — the seven core checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
@@ -818,7 +852,7 @@ lib/build.mjs         planBuild / measured optimize / check / build / buildFull 
 lib/fullstack.mjs     full-build plan, shared types, artifact stats + manifest, wasm helpers
 lib/service.mjs       generated-service env, offline-first build, spawn, health wait
 lib/serve.mjs         serve command
-lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart
+lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart, multi-target preview
 lib/bench.mjs         measured timings + artifact sizes + bench --full table
 lib/async_runtime.mjs measured profile + read-only layer/a11y inspect
 lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size report
@@ -833,5 +867,5 @@ test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/examples.test.mjs  example registry and runner tests (12)
-test/*.test.mjs       node:test unit suite (100 tests)
+test/*.test.mjs       node:test unit suite (111 tests)
 ```

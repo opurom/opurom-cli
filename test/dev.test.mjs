@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { devClientScript, injectDevClient, mimeType, patchAppState, resolveStatic, sseFrame } from '../lib/dev.mjs';
+import { devClientScript, injectDevClient, mimeType, parseDevTargets, patchAppState, resolveStatic, sseFrame, targetsIndexHtml } from '../lib/dev.mjs';
 
 test('SSE client uses the state key, reload event and sessionStorage', () => {
   const script = devClientScript();
@@ -46,4 +46,28 @@ test('sseFrame and mimeType produce usable wire values', () => {
   assert.match(mimeType('app.js'), /javascript/);
   assert.match(mimeType('index.html'), /text\/html/);
   assert.equal(mimeType('data.bin'), 'application/octet-stream');
+});
+
+test('parseDevTargets defaults to web, validates, dedupes and preserves order', () => {
+  assert.deepEqual(parseDevTargets(undefined), ['web']);
+  assert.deepEqual(parseDevTargets(true), ['web']);
+  assert.deepEqual(parseDevTargets(''), ['web']);
+  assert.deepEqual(parseDevTargets('web,wechat'), ['web', 'wechat']);
+  assert.deepEqual(parseDevTargets(' native , web , native '), ['native', 'web']);
+  assert.deepEqual(parseDevTargets('web,,wechat'), ['web', 'wechat']);
+  assert.deepEqual(parseDevTargets(['web', 'wechat']), ['web', 'wechat']);
+  assert.throws(() => parseDevTargets('web,full'), /invalid --targets: full/);
+  assert.throws(() => parseDevTargets('wasm'), /invalid --targets: wasm/);
+});
+
+test('targetsIndexHtml lists each target with a link to its entry file', () => {
+  const html = targetsIndexHtml([
+    { target: 'web', entry: 'index.html' },
+    { target: 'wechat', entry: 'app.js' },
+    { target: 'qq', entry: null },
+  ]);
+  assert.match(html, /<title>opurom dev targets<\/title>/);
+  assert.match(html, /href="\/web\/index\.html">web<\/a>/);
+  assert.match(html, /href="\/wechat\/app\.js">wechat<\/a>/);
+  assert.match(html, /<li>qq \(no emitted files\)<\/li>/);
 });

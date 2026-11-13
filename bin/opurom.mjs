@@ -37,8 +37,9 @@ Commands:
   serve --out <dir> [--port N]    run the generated service (OPR_PORT/OPR_DB)
   migrate --src <src.opu> --out <dir>
                                   generate SQL migrations from the IR models
-  dev --src <src.opu> [--port N] [--sync]
-                                  serve web target with SSE hot reload (+ backend restart)
+  dev --src <src.opu> [--port N] [--sync] [--targets t1,t2]
+                                  serve web target with SSE hot reload (+ backend restart);
+                                  --targets lowers 2+ targets from one IR and lists them
   dev --sync [--clients N] [--port N]
                                   verify N loopback WebSocket clients against a running sync hub
   bench --src <src.opu> [--out <dir>] [--full]
@@ -138,7 +139,7 @@ async function main(argv) {
         return (await verifySync({ port, clients: flags.clients })).code;
       }
       const { src } = requireFlags(flags, ['src']);
-      await dev({ src, port, sync });
+      await dev({ src, port, sync, targets: flags.targets });
       return 0; // the HTTP server keeps the process alive
     }
     case 'bench': {
