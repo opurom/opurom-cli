@@ -1,0 +1,12 @@
+import "models/todo.opu"
+import "views/dashboard.opu"
+
+app TodoApp {
+  state remaining = 0
+
+  Column(p: 24, gap: 16, align: center) {
+    Text("Todos: {remaining}", size: 24)
+    Text("Status: {status}", size: 14)
+    Button("Add") { remaining += 1 }
+  }
+}

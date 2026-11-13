@@ -24,9 +24,10 @@ your shell and no npm packages are fetched.
 | --- | --- |
 | `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
 | `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the spec). |
-| `init <dir> [--template counter\|particles]` | Scaffolds `opurom.json` (name + targets), a starter screen (`src/main.opu` from the counter template by default; `--template particles` writes `src/particles.opu` with a seeded particle field and a spring animation), `README.md`, `.gitignore`. Refuses to overwrite a non-empty directory. |
+| `init <dir> [--template counter\|particles\|project]` | Scaffolds `opurom.json` (name + targets), a starter screen (`src/main.opu` from the counter template by default; `--template particles` writes `src/particles.opu` with a seeded particle field and a spring animation), `README.md`, `.gitignore`. `--template project` writes `main.opu`, two imported modules under `models/` and `views/`, and a README describing the layout. Refuses to overwrite a non-empty directory. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
+| `build --project <dir> --target <name> --out <dir>` | Resolves `<dir>/main.opu` and its `import` declarations into one program, then runs the same compile-and-lower pipeline. Accepts every target and build flag from `--src`. Errors clearly when `main.opu` is absent. |
 | `build --src <src.opu> --target <name> --out <dir> --optimize` | Runs `opuromc optimize <ir> -o <optimized-ir>` before every emitter, prints measured input/output byte sizes and falls back to the original IR with an explicit message if the compiler cannot optimize. Default builds are unchanged. |
 | `build --src <src.opu> --target <name> --out <dir> --minify` | Minifies the emitted `.js` files with the built-in safe minifier (comments and non-semantic whitespace only), removes unused generated assets, prints the measured before/after byte table and writes the measured baseline to `<out>/.opurom-size.json`. Works with every target including `full` and `wasm`, and composes with `--optimize`, `--tree-shake` and `--sourcemap`. |
 | `build --src <src.opu> --target <name> --out <dir> --tree-shake` | Tokenizes the emitter's own JS, computes top-level function reachability, removes unreachable declarations and unused generated assets, and prints exactly what was removed plus a `fs.statSync` before/after table. No bundler and no third-party dependency graph. |
@@ -62,6 +63,8 @@ cli init tmp/demo
 cli check tmp/demo/src/main.opu
 cli init tmp/field --template particles
 cli check tmp/field/src/particles.opu
+cli init tmp/app --template project
+cli build --project tmp/app --target web --out tmp/app-web
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-opt --optimize
 cli build --src ../opurom-spec/counter.opu --target web --out tmp/web-min --minify
@@ -84,6 +87,18 @@ cli test
 
 `package.json` scripts: `node --test` (`npm test`) runs the dependency-free unit suite;
 `node bin/opurom.mjs doctor` (`npm run doctor`) runs the toolchain check.
+
+## Multi-file projects
+
+`init <dir> --template project` writes an app entry with two imported modules.
+The app entry is `<dir>/main.opu`; it imports `models/todo.opu` (a `model` and an
+`api` block) and `views/dashboard.opu` (`state` and `theme`). `opuromc compile`
+resolves those imports from the main file and merges their declarations into one
+IR before lowering, so `--project` accepts the same targets and flags as `--src`.
+Imported modules contribute `state`, `model`, `api`, `theme` and nested `import`
+declarations; UI nodes and event handlers stay in the app entry. `build --project`
+reports an error when `<dir>/main.opu` is absent, and `--src` with `--project` is
+rejected. Files in the project directory are compiled when an import reaches them.
 
 ## Quickstart: one `.opu` file → a running full-stack service
 
@@ -877,7 +892,7 @@ lib/targets.mjs       8 emitters + spec parsing + build-target validation
 lib/proc.mjs          spawnSync wrappers
 lib/doctor.mjs        toolchain report
 lib/init.mjs          scaffold
-lib/build.mjs         planBuild / measured optimize / check / build / buildFull / migrate / buildWasm
+lib/build.mjs         planBuild / measured optimize / check / projectMain / build / buildFull / migrate / buildWasm
 lib/fullstack.mjs     full-build plan, shared types, artifact stats + manifest, wasm helpers
 lib/service.mjs       generated-service env, offline-first build, spawn, health wait
 lib/serve.mjs         serve command
@@ -891,6 +906,8 @@ lib/optimize.mjs      reachability analysis, tree shaking, v3 segment-level sour
 lib/examples.mjs      example registry, listing and ctest-style parallel test runner
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
+templates/particles.opu  seeded particle-field scaffold source
+templates/project/    multi-file app entry, two modules and README
 test/fixtures/inspect.opuir.json  inspector fixture
 test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm host)
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
@@ -898,5 +915,6 @@ test/optimize.test.mjs  reachability, source maps, composition and size tests (8
 test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
 test/doctor.test.mjs   toolchain report tests (3)
-test/*.test.mjs       node:test unit suite (122 tests)
+test/project.test.mjs project entry, imports and scaffold build tests (5)
+test/*.test.mjs       node:test unit suite (128 tests)
 ```

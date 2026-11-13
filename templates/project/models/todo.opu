@@ -1,0 +1,10 @@
+model Todo {
+  id: int primary
+  title: string
+  done: bool = false
+}
+
+api "/todos" {
+  list Todo
+  create Todo
+}
