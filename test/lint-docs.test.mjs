@@ -65,7 +65,7 @@ test('lint-docs reports each rule with its line number and sorted file order', (
     'Label: round-2',
     'Label: Round 3',
     'Label: r7_widget r12_layout',
-    '*Figure 4: diagram',
+    '*Figure 4:',
     'All published source, comments and documentation are written in English.',
     String.fromCharCode(0x6587),
     'no invented results',
