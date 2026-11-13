@@ -48,16 +48,25 @@ test('sseFrame and mimeType produce usable wire values', () => {
   assert.equal(mimeType('data.bin'), 'application/octet-stream');
 });
 
-test('parseDevTargets defaults to web, validates, dedupes and preserves order', () => {
-  assert.deepEqual(parseDevTargets(undefined), ['web']);
-  assert.deepEqual(parseDevTargets(true), ['web']);
-  assert.deepEqual(parseDevTargets(''), ['web']);
+test('parseDevTargets defaults to web-dom, validates, dedupes and preserves order', () => {
+  assert.deepEqual(parseDevTargets(undefined), ['web-dom']);
+  assert.deepEqual(parseDevTargets(true), ['web-dom']);
+  assert.deepEqual(parseDevTargets(''), ['web-dom']);
+  assert.deepEqual(parseDevTargets('web-dom'), ['web-dom']);
+  assert.deepEqual(parseDevTargets('web-dom,web'), ['web-dom', 'web']);
   assert.deepEqual(parseDevTargets('web,wechat'), ['web', 'wechat']);
   assert.deepEqual(parseDevTargets(' native , web , native '), ['native', 'web']);
   assert.deepEqual(parseDevTargets('web,,wechat'), ['web', 'wechat']);
   assert.deepEqual(parseDevTargets(['web', 'wechat']), ['web', 'wechat']);
   assert.throws(() => parseDevTargets('web,full'), /invalid --targets: full/);
   assert.throws(() => parseDevTargets('wasm'), /invalid --targets: wasm/);
+});
+
+test('parseDevTargets accepts all nine dev targets including web-dom', () => {
+  const all = 'native,web,wechat,alipay,qq,douyin,baidu,kuaishou,web-dom';
+  assert.deepEqual(parseDevTargets(all), all.split(','));
+  assert.deepEqual(parseDevTargets('web'), ['web']);
+  assert.throws(() => parseDevTargets('web-dom,unknown'), /invalid --targets: unknown/);
 });
 
 test('targetsIndexHtml lists each target with a link to its entry file', () => {

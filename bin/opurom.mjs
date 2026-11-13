@@ -43,8 +43,8 @@ Commands:
   migrate --src <src.opu> --out <dir>
                                   generate SQL migrations from the IR models
   dev --src <src.opu> [--port N] [--sync] [--targets t1,t2]
-                                  serve web target with SSE hot reload (+ backend restart);
-                                  --targets lowers 2+ targets from one IR and lists them
+                                  serve web-dom page with SSE hot reload (+ backend restart);
+                                  --targets accepts nine dev targets; 2+ list them at /
   dev --sync [--clients N] [--port N]
                                   verify N loopback WebSocket clients against a running sync hub
   bench --src <src.opu> [--out <dir>] [--full] [--json]
