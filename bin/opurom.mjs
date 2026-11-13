@@ -24,7 +24,7 @@ Commands:
   targets                         list the IR emitters
   init <dir>                      scaffold a new project
   check <src.opu>                 type-check a source file
-  build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify]
+  build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target full --out <dir>
@@ -82,15 +82,17 @@ async function main(argv) {
       validateBuildTarget(target);
       const optimize = flagEnabled(flags, 'optimize');
       const minify = flagEnabled(flags, 'minify');
+      const treeShake = flagEnabled(flags, 'tree-shake');
+      const sourcemap = flagEnabled(flags, 'sourcemap');
       if (target === 'full') {
-        buildFull({ src, out, optimize, minify });
+        buildFull({ src, out, optimize, minify, treeShake, sourcemap });
         return 0;
       }
       if (target === 'wasm') {
-        buildWasm({ src, out, optimize, minify });
+        buildWasm({ src, out, optimize, minify, treeShake, sourcemap });
         return 0;
       }
-      build({ src, target, out, optimize, minify });
+      build({ src, target, out, optimize, minify, treeShake, sourcemap });
       return 0;
     }
     case 'size': {
