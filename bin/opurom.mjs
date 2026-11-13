@@ -23,7 +23,7 @@ const USAGE = `opurom — OPUROM toolchain CLI (zero npm dependencies)
 Usage: node bin/opurom.mjs <command> [options]
 
 Commands:
-  doctor                          check rustc/cargo/node/opuromc/render
+  doctor                          check rustc/cargo/node/opuromc/render/gpu
   targets                         list the IR emitters
   init <dir>                      scaffold a new project
   check <src.opu>                 type-check a source file

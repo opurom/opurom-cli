@@ -22,7 +22,7 @@ your shell and no npm packages are fetched.
 
 | Command | What it does |
 | --- | --- |
-| `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core` / `opurom-platform` are reported as optional. |
+| `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
 | `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the spec). |
 | `init <dir>` | Scaffolds `opurom.json` (name + targets), `src/main.opu` (from the counter template), `README.md`, `.gitignore`. Refuses to overwrite a non-empty directory. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
@@ -806,7 +806,7 @@ screen-reader integration.
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (119 tests)
+- `node --test`: the dependency-free unit suite (122 tests)
   passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, the stable JSON schema, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
@@ -816,7 +816,7 @@ screen-reader integration.
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
   flag matrix, default byte identity, exact removal reports, measured size math, the
   `dev --targets` parser, the target listing page, a multi-target dev server run against a
-  stub compiler and publication checks.
+  stub compiler, publication checks and the doctor renderer/GPU availability report.
 - `node bin/opurom.mjs test`: 10 checks PASS at commit time — the seven core checks, the
   full-stack check (real service on a free port: health, POST 201, GET list, GET one, PUT,
   DELETE, 404, SSR, persisted SQLite row), the wasm check (build +
@@ -895,5 +895,6 @@ test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
-test/*.test.mjs       node:test unit suite (119 tests)
+test/doctor.test.mjs   toolchain report tests (3)
+test/*.test.mjs       node:test unit suite (122 tests)
 ```
