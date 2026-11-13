@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { flagEnabled, parseArgs, parsePort, requireFlags } from '../lib/args.mjs';
-import { build, buildFull, buildWasm, check, migrate } from '../lib/build.mjs';
+import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
@@ -25,12 +25,14 @@ Usage: node bin/opurom.mjs <command> [options]
 Commands:
   doctor                          check rustc/cargo/node/opuromc/render/gpu
   targets                         list the IR emitters
-  init <dir> [--template counter|particles]
-                                  scaffold a new project (particles adds a seeded field)
+  init <dir> [--template counter|particles|project]
+                                  scaffold a new project (project has multiple .opu files)
   check <src.opu>                 type-check a source file
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
+  build --project <dir> --target <name> --out <dir>
+                                  build <dir>/main.opu with its imports resolved
   build --src <src.opu> --target full --out <dir>
                                   frontend + service crate + migrations + shared types
   verify --out <dir>              check the generated-artifact manifest of a full build
@@ -60,6 +62,14 @@ Commands:
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
 
+function buildSource(flags) {
+  if (flags.project !== undefined) {
+    if (flags.src !== undefined) throw new Error('usage: build accepts --src or --project, not both');
+    return projectMain(flags.project);
+  }
+  return requireFlags(flags, ['src']).src;
+}
+
 async function main(argv) {
   const { flags, positionals } = parseArgs(argv);
   const command = positionals[0];
@@ -78,7 +88,8 @@ async function main(argv) {
       if (!positionals[1]) throw new Error('usage: init <dir>');
       const template = typeof flags.template === 'string' ? flags.template : 'counter';
       const dir = init(positionals[1], { template });
-      console.log(`init ok: ${dir} (edit ${path.join(dir, 'src')})`);
+      const edit = path.join(dir, template === 'project' ? 'main.opu' : 'src');
+      console.log(`init ok: ${dir} (edit ${edit})`);
       return 0;
     }
     case 'check': {
@@ -89,7 +100,8 @@ async function main(argv) {
       return 0;
     }
     case 'build': {
-      const { src, target, out } = requireFlags(flags, ['src', 'target', 'out']);
+      const src = buildSource(flags);
+      const { target, out } = requireFlags(flags, ['target', 'out']);
       validateBuildTarget(target);
       const optimize = flagEnabled(flags, 'optimize');
       const minify = flagEnabled(flags, 'minify');

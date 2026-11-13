@@ -25,7 +25,7 @@ test('the particles template scaffolds a seeded particle field that the default 
   const base = tmpDir('init-particles-');
   const project = path.join(base, 'field');
   try {
-    assert.deepEqual([...TEMPLATES], ['counter', 'particles']);
+    assert.deepEqual([...TEMPLATES], ['counter', 'particles', 'project']);
     assert.equal(init(project, { template: 'particles' }), project);
     const source = fs.readFileSync(path.join(project, 'src', 'particles.opu'), 'utf8');
     assert.match(source, /app Particles/);

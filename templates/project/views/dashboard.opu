@@ -1,0 +1,5 @@
+app Dashboard {
+  state status = "ready"
+
+  theme { accent: "#097FEB", radius: 12 }
+}
