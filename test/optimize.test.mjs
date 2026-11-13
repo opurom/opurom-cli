@@ -76,7 +76,7 @@ case "$1" in
   targets)
     printf '%s\\n' 'native\tCargo.toml, src/main.rs'
     printf '%s\\n' 'web\tindex.html, app.js, ir.json'
-    printf '%s\\n' 'wechat\tapp.json, index.wxml, index.wxss, index.js'
+    printf '%s\\n' 'wechat\tapp.json, app.js, pages/index/index.wxml, pages/index/index.wxss, pages/index/index.js'
     ;;
   target)
     mkdir -p "$6"
@@ -271,24 +271,25 @@ test('tree shake reports exact functions/assets and size repeats the measurement
     fs.writeFileSync(path.join(out, 'index.html'), '<html></html>\n');
     fs.writeFileSync(path.join(out, 'ir.json'), '{}\n');
     fs.writeFileSync(path.join(out, 'app.json'), '{"pages":[]}\n');
-    fs.writeFileSync(path.join(out, 'index.js'), '// stale\nPage({});\n');
+    fs.mkdirSync(path.join(out, 'pages', 'index'), { recursive: true });
+    fs.writeFileSync(path.join(out, 'pages', 'index', 'index.js'), '// stale\nPage({});\n');
     fs.writeFileSync(path.join(out, 'notes.txt'), 'keep me\n');
-    const staleIndexBytes = fs.statSync(path.join(out, 'index.js')).size;
+    const staleIndexBytes = fs.statSync(path.join(out, 'pages', 'index', 'index.js')).size;
     const lines = [];
     const result = finalizeBuild({
       out, target: 'web', opuromc, minify: false, treeShake: true, sourcemap: false,
       transforms: ANALYZE_TRANSFORMS, log: (line) => lines.push(String(line)),
     });
     assert.deepEqual(result.removed.map((entry) => `${entry.name}:${entry.bytes}`), [
-      'app.json:13', `index.js:${staleIndexBytes}`,
+      'app.json:13', `pages/index/index.js:${staleIndexBytes}`,
     ]);
     assert.equal(fs.existsSync(path.join(out, 'app.json')), false);
-    assert.equal(fs.existsSync(path.join(out, 'index.js')), false);
+    assert.equal(fs.existsSync(path.join(out, 'pages', 'index', 'index.js')), false);
     assert.deepEqual(result.removedFunctions.map((entry) => entry.name), ['unused']);
     assert.equal(result.treeShakeBefore.get('app.js'), Buffer.byteLength(STUB_JS));
     assert.equal(result.treeShakeAfter.get('app.js'), fs.statSync(path.join(out, 'app.js')).size);
     assert.match(result.report, /tree shake removed functions: app\.js: unused \(\d+ B\)/);
-    assert.match(result.report, /tree shake removed generated assets: app\.json \(13 B\), index\.js \(\d+ B\)/);
+    assert.match(result.report, new RegExp(`tree shake removed generated assets: app\\.json \\(13 B\\), pages/index/index\\.js \\(${staleIndexBytes} B\\)`));
     assert.match(result.report, /processed js files: app\.js/);
     assert.ok(lines.some((line) => line.startsWith('tree shake: removed app.js: unused')));
     assert.ok(lines.some((line) => line.startsWith('removed unused asset: app.json')));

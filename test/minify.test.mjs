@@ -37,7 +37,7 @@ case "$1" in
   targets)
     printf '%s\\n' 'native	Cargo.toml, src/main.rs'
     printf '%s\\n' 'web	index.html, app.js, ir.json'
-    printf '%s\\n' 'wechat	app.json, index.wxml, index.wxss, index.js'
+    printf '%s\\n' 'wechat	app.json, app.js, pages/index/index.wxml, pages/index/index.wxss, pages/index/index.js'
     ;;
   target)
     mkdir -p "$6"
@@ -183,12 +183,13 @@ test('finalize minifies, removes stale emitter assets, and size repeats the meas
     fs.mkdirSync(out);
     // Stale wechat output from a previous build into the same directory.
     fs.writeFileSync(path.join(out, 'app.json'), '{"pages":[]}\n');
-    fs.writeFileSync(path.join(out, 'index.js'), '// stale\nPage({});\n');
+    fs.mkdirSync(path.join(out, 'pages', 'index'), { recursive: true });
+    fs.writeFileSync(path.join(out, 'pages', 'index', 'index.js'), '// stale\nPage({});\n');
     fs.writeFileSync(path.join(out, 'notes.txt'), 'keep me\n');
     // Generic names a user may own must never be deleted as "unused".
     fs.writeFileSync(path.join(out, 'README.md'), '# my notes\n');
     fs.writeFileSync(path.join(out, 'Cargo.toml'), '[package]\nname = "mine"\n');
-    const staleIndexJs = fs.statSync(path.join(out, 'index.js')).size;
+    const staleIndexJs = fs.statSync(path.join(out, 'pages', 'index', 'index.js')).size;
     const rawApp = fs.readFileSync(new URL('web-app.js.fixture', FIXTURES), 'utf8');
     fs.writeFileSync(path.join(out, 'app.js'), rawApp);
     fs.writeFileSync(path.join(out, 'index.html'), '<html></html>\n');
@@ -198,11 +199,11 @@ test('finalize minifies, removes stale emitter assets, and size repeats the meas
     const result = finalizeMinifiedBuild({ out, target: 'web', opuromc, log: (line) => lines.push(String(line)) });
     assert.deepEqual(
       result.removed.map((entry) => `${entry.name}:${entry.bytes}`),
-      [`app.json:13`, `index.js:${staleIndexJs}`],
+      [`app.json:13`, `pages/index/index.js:${staleIndexJs}`],
       'exact stale assets must be reported',
     );
     assert.equal(fs.existsSync(path.join(out, 'app.json')), false);
-    assert.equal(fs.existsSync(path.join(out, 'index.js')), false);
+    assert.equal(fs.existsSync(path.join(out, 'pages', 'index', 'index.js')), false);
     assert.equal(fs.readFileSync(path.join(out, 'notes.txt'), 'utf8'), 'keep me\n', 'non-emitter file was removed');
     assert.equal(fs.existsSync(path.join(out, 'README.md')), true, 'a user README.md was deleted');
     assert.equal(fs.existsSync(path.join(out, 'Cargo.toml')), true, 'a user Cargo.toml was deleted');
@@ -218,7 +219,7 @@ test('finalize minifies, removes stale emitter assets, and size repeats the meas
     const afterTotal = [...result.after.values()].reduce((sum, n) => sum + n, 0);
     assert.match(report, new RegExp(`before ${beforeTotal} B -> after ${afterTotal} B`));
     assert.match(report, /\| app\.js \| 1438 B \| \d+ B \| \d+\.\d% \|/);
-    assert.match(report, new RegExp(`removed unused generated assets: app\\.json \\(13 B\\), index\\.js \\(${staleIndexJs} B\\)`));
+    assert.match(report, new RegExp(`removed unused generated assets: app\\.json \\(13 B\\), pages/index/index\\.js \\(${staleIndexJs} B\\)`));
     // The baseline manifest records the real statSync sizes of the pre-build tree.
     const manifest = JSON.parse(fs.readFileSync(path.join(out, '.opurom-size.json'), 'utf8'));
     assert.equal(manifest.version, 1);
@@ -289,7 +290,7 @@ test('parseTargetsOutput reads the real `opuromc targets` shape', () => {
   const map = parseTargetsOutput([
     'native\tCargo.toml, src/main.rs',
     'web\tindex.html, app.js, ir.json',
-    'wechat\tapp.json, index.wxml, index.wxss, index.js',
+    'wechat\tapp.json, app.js, pages/index/index.wxml, pages/index/index.wxss, pages/index/index.js',
     '',
   ].join('\n'));
   assert.deepEqual(map.get('web'), ['index.html', 'app.js', 'ir.json']);

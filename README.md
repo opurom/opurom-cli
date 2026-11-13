@@ -46,6 +46,8 @@ your shell and no npm packages are fetched.
 | `profile --src <src.opu> --repeat N` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
+| `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
+| `test --examples [--filter <name>] [--jobs N] [--verbose]` | Runs the registered example tests ctest-style: one `PASS` / `FAIL` / `SKIP` line per test, then `tests passed: X, failed: Y, skipped: Z, time N.Ns` and the failed test ids; exits 1 on any failure. Tests of one app run in registry order (render consumes the IR its compile test wrote); apps run in parallel, `--jobs` defaults to min(4, cpus). A missing source marked `required: false` is a SKIP with the reason; a missing `required: true` source is a FAIL. Commands use `{source}` / `{tmp}` placeholders and the `opuromc`, `opurom-render`, `node` tool aliases, so no machine-specific paths are stored in the registry. |
 
 ```sh
 cd opurom-cli
@@ -246,8 +248,8 @@ things, in this order:
 
 1. **Removes unused generated assets.** The CLI asks the compiler for its own file list
    (`opuromc targets`) and deletes only files that belong to *another* emitter's file list and
-   were not written by this build — for example a stale `app.json` / `index.js` left in the
-   output directory by an earlier `wechat` build. Every removed file is printed with its
+   were not written by this build — for example stale `app.json` / `pages/index/index.js` files
+   left in the output directory by an earlier `wechat` build. Every removed file is printed with its
    measured size. Files that are not emitter assets (your own files, the `server/`, `shared/`
    and `migrations/` chain outputs) are never touched.
 2. **Minifies the emitted `.js` files** with `lib/minify.mjs`, a small state-machine tokenizer.
@@ -391,14 +393,17 @@ warmup-exclusion arithmetic, percentile math on known arrays, the environment de
 real N-client same-delta verification, dropped-client FAIL, no-hub SKIP and socket cleanup),
 `lib/optimize.mjs` (reachability on used/unused/recursive/string-lookalike fixtures, Source Map v3
 shape and `node:module` parsing, all 16 flag combinations, default byte identity, exact
-function/asset removal and `fs.statSync` size math) and the e2e output parsers.
+function/asset removal and `fs.statSync` size math), `lib/examples.mjs` (registry schema
+validation, listing rows, filter, jobs cap, parallel pool, summary math and exit codes against a
+fake registry) and the e2e output parsers.
 `test/catalog.test.mjs` also drives stub compilers,
 two SSE clients and a real local `dev --sync` server; `test/async_runtime.test.mjs` drives a stub renderer
 and compares IR bytes before/after `inspect`; `test/profile.test.mjs` drives stub compiler, renderer
 and GPU-backend binaries; `test/sync.test.mjs` starts a real loopback TCP WebSocket hub without
-the sibling Rust server; `test/optimize.test.mjs` drives stub compilers without sibling Rust repos.
-The 88 unit tests pass with **no sibling Rust repos
-present**.
+the sibling Rust server; `test/optimize.test.mjs` drives stub compilers without sibling Rust repos;
+`test/examples.test.mjs` covers the example registry, listing, filter, jobs cap, pool and summary
+math with trivial `node -e` commands. The 100 unit tests pass with **no sibling Rust repos
+present** (the shipped-registry and `opurom examples` checks skip when the sibling repo is absent).
 
 ## `test`: end-to-end checks
 
@@ -409,7 +414,7 @@ check:
 2. Compile golden `counter.opu` and `assert.deepEqual` the parsed IR vs
    `opurom-spec/counter.opuir.json`.
 3. Build `web`, `node --check` the generated `app.js`.
-4. Build `wechat`, `node --check` the generated `index.js`.
+4. Build `wechat`, `node --check` the generated root `app.js` and `pages/index/index.js`.
 5. Build `web` with `--minify`, `node --check` the minified `app.js` and assert the measured
    before/after sizes and the reduction percentage.
 6. Build `native` (including `cargo build --release`), run the binary with piped stdin,
@@ -717,11 +722,13 @@ screen-reader integration.
   `--full` table), `bench --compare` (software vs GPU backend, both MEASURED, paired with the
   byte-equality result), `profile` (measured sequential software-raster frames with honest `n/a`),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated),
-  `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `test`
+  `inspect` (read-only layer/a11y trees), `size` (measured before/after byte table), `examples`
+  (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (88 tests)
-  passes with **no sibling Rust repo present**. It covers the new flags, exact measured
+- `node --test`: the dependency-free unit suite (100 tests)
+  passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
+  filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, optimizer success/fallback, sync hub bookkeeping, a real two-client
   `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
   comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
@@ -738,9 +745,9 @@ screen-reader integration.
 - Verified by hand against the real toolchain: default `build` output was byte-identical to a
   clean `HEAD` CLI (identical `app.js`, `index.html` and `ir.json` checksums); `build
   --optimize` printed measured `1411 B -> 1411 B` on `counter.opu`; `build --minify` measured
-  `app.js 1438 B -> 1292 B` (`3232 B -> 3086 B` total, 4.5%) on `counter.opu` and removed the
-  stale `wechat` assets (`app.json`, `index.js`, `index.wxml`, `index.wxss`) left in the output
-  directory by an earlier build; `bench --full` measured six steps and one `GET /health`, with
+  `app.js 1438 B -> 1292 B` (`3232 B -> 3086 B` total, 4.5%) on `counter.opu` and removed stale
+  mini-program emitter assets left in the output directory by an earlier build; `bench --full`
+  measured six steps and one `GET /health`, with
   the real numbers shown above; two `dev --sync` SSE clients received snapshots and the same
   reload frame after a source change; real N=2 and N=8 RFC 6455 loopback clients each received
   the same state delta with MEASURED per-client `hrtime` delivery times and clean socket
@@ -797,11 +804,13 @@ lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size 
 lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality
 lib/sync.mjs          RFC 6455 codec + loopback hub + N-client sync verification
 lib/optimize.mjs      reachability analysis, tree shaking, v3 segment-level source maps
+lib/examples.mjs      example registry, listing and ctest-style parallel test runner
 lib/e2e.mjs           end-to-end assertions
 templates/main.opu    counter-based scaffold source
 test/fixtures/inspect.opuir.json  inspector fixture
 test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm host)
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
-test/*.test.mjs       node:test unit suite (88 tests)
+test/examples.test.mjs  example registry and runner tests (12)
+test/*.test.mjs       node:test unit suite (100 tests)
 ```
