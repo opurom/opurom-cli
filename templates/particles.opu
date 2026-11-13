@@ -1,0 +1,16 @@
+// A seeded particle field over a gradient panel, based on
+// opurom-examples/particles.opu.
+app Particles {
+  theme { accent: "#097FEB", radius: 12 }
+
+  Column(p: 24, gap: 16, align: center) {
+    Text("Particle field", size: 28)
+    Text("64 seeded dots over a two-stop gradient", size: 14)
+
+    Container(width: 320, height: 200, p: 16, rounded: 12, animate: spring,
+              gradient: "#097FEB,#101828",
+              particles: "count=64,seed=7,radius=3,alpha=1024,color=#F2F6FF") {
+      Text("seed = 7", size: 18)
+    }
+  }
+}

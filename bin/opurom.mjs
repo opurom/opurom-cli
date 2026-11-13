@@ -25,7 +25,8 @@ Usage: node bin/opurom.mjs <command> [options]
 Commands:
   doctor                          check rustc/cargo/node/opuromc/render/gpu
   targets                         list the IR emitters
-  init <dir>                      scaffold a new project
+  init <dir> [--template counter|particles]
+                                  scaffold a new project (particles adds a seeded field)
   check <src.opu>                 type-check a source file
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   compile IR and lower to a target
@@ -75,8 +76,9 @@ async function main(argv) {
       return 0;
     case 'init': {
       if (!positionals[1]) throw new Error('usage: init <dir>');
-      const dir = init(positionals[1]);
-      console.log(`init ok: ${dir} (edit ${path.join(dir, 'src', 'main.opu')})`);
+      const template = typeof flags.template === 'string' ? flags.template : 'counter';
+      const dir = init(positionals[1], { template });
+      console.log(`init ok: ${dir} (edit ${path.join(dir, 'src')})`);
       return 0;
     }
     case 'check': {
