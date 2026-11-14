@@ -47,7 +47,7 @@ your shell and no npm packages are fetched.
 | `bench --src <src.opu> [--out <dir>] [--full] [--json]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full [--json]` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare [--json]` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
-| `profile --src <src.opu> [--frames N] [--json] [--markdown]` | Compiles once, then times one real `opurom-render` process per frame (1..1000, default 30). `--json` reports MEASURED p50/p95/min/max/total ms, integer `fpsX10` and a bounded ASCII sparkline; `--markdown` writes the same fixed-schema record as a two-column table. A missing renderer is `SKIP` with a concrete reason. Software-raster timings on this host only. |
+| `profile --src <src.opu> [--frames N] [--degrade <60\|120>] [--json] [--markdown]` | Compiles once, then times one real `opurom-render` process per frame (1..1000, default 30). `--json` reports MEASURED p50/p95/min/max/total ms, integer `fpsX10` and a bounded ASCII sparkline; `--markdown` writes the same fixed-schema record as a two-column table. `--degrade <60\|120>` additionally runs the renderer with `--auto-degrade <hz>` over the SAME measured per-frame durations (fed through `--frame-ms`) and adds a `tiers` field listing how many frames ran at each quality tier (Full/Reduced/Minimal); the fixed key order is unchanged without the flag. A missing renderer is `SKIP` with a concrete reason. Software-raster timings on this host only. |
 | `profile --src <src.opu> --repeat N [--json]` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `<bench or profile --repeat command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
 | `profile --frames N --json` | Emits the dedicated frame-profile object with deterministic key order, derived `fpsX10` and a bounded ASCII sparkline. |
@@ -893,6 +893,10 @@ of real measured samples and is `0` on `SKIP`. `p50`, `p95`, `min`, `max` and
 to an integer; `sparkline` has at most 24 ASCII buckets. `reason` is `null` on
 `PASS` and carries a concrete lookup reason on `SKIP`. `--markdown` writes one row
 per field in the same order, with `null` for every unavailable measured value.
+`--degrade <60|120>` appends a `tiers` field after `reason`, an array of
+`{tier, frames}` objects (Full/Reduced/Minimal, only non-empty tiers) replaying the
+renderer's rolling-window policy over the measured samples; `--markdown` lists it as
+`tier:frames` pairs. Without the flag the object is byte-identical to the schema above.
 
 For the common schema, the CLI exit code still reports measurement availability.
 Frame-profile validation and render errors exit 1; a documented `SKIP` exits 0.

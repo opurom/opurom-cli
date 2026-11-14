@@ -55,8 +55,9 @@ Commands:
                                   measured compile/build times and artifact sizes
   bench --src <src.opu> --compare [--json]
                                   measured software vs GPU backend times + byte equality
-  profile --src <src.opu> [--frames N] [--json] [--markdown]
-                                  measured frame timings, fps x10 and ASCII sparkline (1..1000)
+  profile --src <src.opu> [--frames N] [--degrade <60|120>] [--json] [--markdown]
+                                  measured frame timings, fps x10 and ASCII sparkline (1..1000);
+                                  --degrade also runs the renderer's auto-degrade policy
   profile --src <src.opu> --repeat N [--json]
                                   measured repeated runs, warmup excluded and reported (1..600)
   inspect <ir.json> [--select <id>] [--layers] [--json]
@@ -191,11 +192,17 @@ async function main(argv) {
       const { src } = requireFlags(flags, ['src']);
       const json = flagEnabled(flags, 'json');
       const markdown = flagEnabled(flags, 'markdown');
+      const degrade = flags.degrade === true ? '' : flags.degrade;
+      if (degrade !== undefined && flags.repeat !== undefined) {
+        throw new Error('usage: --degrade applies to --frames, not --repeat');
+      }
       if (flags.repeat !== undefined) {
         if (markdown) throw new Error('usage: --markdown requires --frames, not --repeat');
         return profileRepeat({ src, repeat: flags.repeat, json });
       }
-      if (json || markdown) return profileFrames({ src, frames: flags.frames, json, markdown });
+      if (json || markdown || degrade !== undefined) {
+        return profileFrames({ src, frames: flags.frames, json, markdown, degrade });
+      }
       return profile({ src, frames: flags.frames, json, frameLimit: FRAME_PROFILE_MAX_FRAMES });
     }
     case 'inspect': {
