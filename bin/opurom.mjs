@@ -13,6 +13,7 @@ import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
+import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
@@ -54,8 +55,8 @@ Commands:
                                   measured compile/build times and artifact sizes
   bench --src <src.opu> --compare [--json]
                                   measured software vs GPU backend times + byte equality
-  profile --src <src.opu> [--frames N] [--json]
-                                  measured software-raster frame timings (1..600)
+  profile --src <src.opu> [--frames N] [--json] [--markdown]
+                                  measured frame timings, fps x10 and ASCII sparkline (1..1000)
   profile --src <src.opu> --repeat N [--json]
                                   measured repeated runs, warmup excluded and reported (1..600)
   inspect <ir.json> [--select <id>] [--layers] [--json]
@@ -189,10 +190,13 @@ async function main(argv) {
     case 'profile': {
       const { src } = requireFlags(flags, ['src']);
       const json = flagEnabled(flags, 'json');
+      const markdown = flagEnabled(flags, 'markdown');
       if (flags.repeat !== undefined) {
+        if (markdown) throw new Error('usage: --markdown requires --frames, not --repeat');
         return profileRepeat({ src, repeat: flags.repeat, json });
       }
-      return profile({ src, frames: flags.frames, json });
+      if (json || markdown) return profileFrames({ src, frames: flags.frames, json, markdown });
+      return profile({ src, frames: flags.frames, json, frameLimit: FRAME_PROFILE_MAX_FRAMES });
     }
     case 'inspect': {
       const ir = positionals[1];

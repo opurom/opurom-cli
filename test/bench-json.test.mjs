@@ -11,6 +11,7 @@ import {
 import {
   formatProfileReport, machineBackend, machineReport, measureRenderRuns, profileStats,
 } from '../lib/async_runtime.mjs';
+import { FRAME_PROFILE_FIELDS } from '../lib/frame_profile.mjs';
 import { unavailableCpu, unavailableMemory } from '../lib/process-metrics.mjs';
 
 const SOURCE_CLI_ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -137,6 +138,26 @@ function assertBackend(backend, name, measured) {
     for (const key of STATS_KEYS) assert.equal(backend[key], null);
     assert.equal(typeof backend.reason, 'string');
   }
+}
+
+function assertFrameProfileSchema(json, frames) {
+  assert.deepEqual(Object.keys(json), FRAME_PROFILE_FIELDS);
+  assert.equal(json.command, 'profile');
+  assert.equal(json.mode, 'frames');
+  assert.equal(json.status, 'PASS');
+  assert.equal(typeof json.src, 'string');
+  assert.equal(json.requestedFrames, frames);
+  assert.equal(json.frames, frames);
+  assert.equal(json.unit, 'ms');
+  assert.equal(json.reason, null);
+  for (const key of ['p50', 'p95', 'min', 'max', 'totalMs']) {
+    assert.ok(Number.isFinite(json[key]) && json[key] > 0, key);
+  }
+  assert.ok(json.min <= json.p50 && json.p50 <= json.p95 && json.p95 <= json.max);
+  assert.ok(Number.isSafeInteger(json.fpsX10) && json.fpsX10 > 0);
+  assert.equal(typeof json.sparkline, 'string');
+  assert.ok(json.sparkline.length > 0 && json.sparkline.length <= 24);
+  assert.ok([...json.sparkline].every((char) => '_.:-=+*#%@'.includes(char)));
 }
 
 test('machine reports derive statistics from real renderer samples and reject invalid values', () => {
@@ -291,11 +312,7 @@ test('profile --json emits one stable object from real frame timings', () => {
     const src = writeSource(base);
     const result = runCli(cli, base, ['profile', '--src', src, '--frames', '3', '--json']);
     const json = parseReport(result);
-    assertSchema(json, 'profile', 'single');
-    assert.equal(json.frames, 3);
-    assert.deepEqual(json.backends, []);
-    assert.equal(json.byteEqual, null);
-    assert.equal(json.reason, null);
+    assertFrameProfileSchema(json, 3);
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
