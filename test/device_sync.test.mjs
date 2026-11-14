@@ -89,10 +89,10 @@ test('one broadcast delivers the identical payload to every client, in id order'
   assert.deepEqual(payload, { revision: 1, kind: 'hot', reason: 'tree-changed' });
   assert.ok(reg.snapshot().devices.every((d) => d.lastSeen === 1), 'all devices see revision 1');
   assert.equal(reg.logText(), [
-    'mini-1 capability hot (tree-changed)',
-    'native-1 capability hot (tree-changed)',
-    'wasm-1 capability hot (tree-changed)',
-    'web-1 capability hot (tree-changed)',
+    'mini-1 revision 1 hot (tree-changed)',
+    'native-1 revision 1 hot (tree-changed)',
+    'wasm-1 revision 1 hot (tree-changed)',
+    'web-1 revision 1 hot (tree-changed)',
   ].join('\n'));
 });
 

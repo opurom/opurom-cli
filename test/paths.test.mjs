@@ -10,7 +10,7 @@ import {
 test('workspace and sibling discovery are anchored to this repo', () => {
   const root = workspaceRoot();
   assert.equal(siblingRoot('opurom-lang', root), path.join(root, 'opurom-lang'));
-  assert.equal(goldenFile('counter.opuir.json', root), path.join(root, 'opurom-examples', 'counter.opuir.json'));
+  assert.equal(goldenFile('counter.opuir.json', root), path.join(root, 'opurom-examples', 'golden', 'counter.opuir.json'));
   assert.equal(CLI_ROOT, path.resolve(path.join(import.meta.dirname, '..')));
   assert.equal(workspaceRoot(CLI_ROOT), path.dirname(CLI_ROOT));
 });

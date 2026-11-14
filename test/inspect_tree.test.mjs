@@ -63,7 +63,7 @@ function runTreeJson(options = {}) {
 test('the widget tree shows ids, kinds, computed bounds and real visibility conditions', () => {
   const text = runTree();
   assert.match(text, /^Opurom inspect widget tree \(read-only; bounds from opurom-render --a11y\)/);
-  assert.match(text, /^app: WidgetInspectorFixture \(ir 0\.1\)$/m);
+  assert.match(text, /^app: WidgetInspectorFixture \(ir 0\.1\.0\)$/m);
   // Real bounds from the fixture's .a11y.json, not fabricated.
   assert.match(text, /^#0 Column bounds=\[0,0,800,600\] subtree=\[0,0,800,600\]$/m);
   assert.match(text, /^    #2 Text bounds=\[320,16,160,28\] subtree=\[320,16,160,28\]$/m);

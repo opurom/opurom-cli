@@ -5,13 +5,12 @@ import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
-import { runLintDocs } from '../lib/CI tooling.mjs';
 import { init, TEMPLATES } from '../lib/init.mjs';
-import { goldenFile } from '../lib/paths.mjs';
 import { targetsFromBuiltins, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
+import { benchSuite } from '../lib/bench_suite.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
@@ -55,6 +54,9 @@ Commands:
                                   measured compile/build times and artifact sizes
   bench --src <src.opu> --compare [--json]
                                   measured software vs GPU backend times + byte equality
+  bench --suite [--runs N] [--json] [--markdown]
+                                  measured cold compile/render samples and 10 target byte sizes;
+                                  competitors not measured
   profile --src <src.opu> [--frames N] [--degrade <60|120>] [--json] [--markdown]
                                   measured frame timings, fps x10 and ASCII sparkline (1..1000);
                                   --degrade also runs the renderer's auto-degrade policy
@@ -67,7 +69,6 @@ Commands:
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
                                   run registered example tests ctest-style
-  CI tooling [dir]                 check published Markdown for red lines
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
 
@@ -91,7 +92,7 @@ async function main(argv) {
     case 'doctor':
       return runDoctor();
     case 'targets':
-      for (const name of targetsFromBuiltins(goldenFile('the IR format'))) console.log(name);
+      for (const name of targetsFromBuiltins()) console.log(name);
       return 0;
     case 'init': {
       if (flagEnabled(flags, 'list')) {
@@ -171,8 +172,15 @@ async function main(argv) {
       return 0; // the HTTP server keeps the process alive
     }
     case 'bench': {
-      const { src } = requireFlags(flags, ['src']);
       const json = flagEnabled(flags, 'json');
+      const markdown = flagEnabled(flags, 'markdown');
+      if (flagEnabled(flags, 'suite')) {
+        if (flagEnabled(flags, 'full') || flagEnabled(flags, 'compare')) {
+          throw new Error('usage: --suite cannot be combined with --full or --compare');
+        }
+        return benchSuite({ runs: flags.runs, json, markdown }).exitCode;
+      }
+      const { src } = requireFlags(flags, ['src']);
       if (flagEnabled(flags, 'compare')) {
         return compareBackends({ src, json });
       }
@@ -227,8 +235,6 @@ async function main(argv) {
       }
       console.log('Opurom end-to-end tests');
       return (await runE2e()).exitCode;
-    case 'CI tooling':
-      return runLintDocs({ root: positionals[1] ?? '.' });
     default:
       throw new Error(`unknown command: ${command}\n\n${USAGE}`);
   }

@@ -1,22 +1,18 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import test from 'node:test';
 import { build, planBuild } from '../lib/build.mjs';
 import { digestOf, dirtyOf, platformRows } from '../lib/e2e.mjs';
 import { TARGETS, targetsFromBuiltins, validateTarget } from '../lib/targets.mjs';
-import { goldenFile } from '../lib/paths.mjs';
 
-test('targetsFromBuiltins reads the 8 emitters from the IR format', () => {
-  const names = targetsFromBuiltins(goldenFile('the IR format'));
+test('targetsFromBuiltins returns the 8 built-in emitters', () => {
+  const names = targetsFromBuiltins();
   assert.equal(names.length, 8);
   assert.deepEqual(names, [...TARGETS]);
   for (const name of names) assert.doesNotThrow(() => validateTarget(name));
 });
 
-test('targetsFromBuiltins falls back to the built-in list when contract is absent', () => {
-  assert.deepEqual(targetsFromBuiltins('/definitely/not/here/the IR format'), [...TARGETS]);
+test('targetsFromBuiltins ignores any path argument and still returns the built-in list', () => {
+  assert.deepEqual(targetsFromBuiltins('/definitely/not/here/anything.md'), [...TARGETS]);
 });
 
 test('planBuild compiles, lowers, and adds cargo only for native', () => {
@@ -42,14 +38,4 @@ test('e2e output parsers find digest, dirty count and data rows', () => {
   assert.equal(dirtyOf('nothing here\n'), null);
   const rows = ['name | emitter | status', 'a | one', 'b | two', ''].join('\n');
   assert.equal(platformRows(rows).length, 2);
-});
-
-test('a temporary contract copy still parses (no sibling repos needed)', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opurom-examples-copy-'));
-  try {
-    fs.copyFileSync(goldenFile('the IR format'), path.join(dir, 'the IR format'));
-    assert.deepEqual(targetsFromBuiltins(path.join(dir, 'the IR format')), [...TARGETS]);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 });

@@ -22,7 +22,7 @@ your shell and no npm packages are fetched.
 
 | Command | What it does |
 | --- | --- |
-| `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden contract; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
+| `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden fixture; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
 | `targets` | Prints the emitter names read from `the framework rules`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the framework rules). |
 | `init --list` | Prints every starter template name, one per line, in stable alphabetical order. |
 | `init <dir> [--template <name>]` | Scaffolds `opurom.json` (name + targets), a starter screen, `README.md`, `.gitignore`, a 128x128 `logo.png`, its derived `favicon.ico` and an `index.html` favicon link. The image bytes are embedded in `lib/init.mjs`, so scaffolding needs no umbrella checkout. `blank` is a minimal screen, `dashboard` adds themed UI and interaction, `fullstack` declares a model and API; `counter`, `particles` and `project` remain available. Refuses to overwrite a non-empty directory. An unknown name is a clear error. |
@@ -47,6 +47,7 @@ your shell and no npm packages are fetched.
 | `bench --src <src.opu> [--out <dir>] [--full] [--json]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full [--json]` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare [--json]` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
+| `bench --suite [--runs N] [--json] [--markdown]` | Runs a fixed fixture through real `opuromc` and `opurom-render` subprocesses, reports cold compile samples, single-frame render samples and byte sizes for all ten build targets. `--runs` accepts 1..1000; missing binaries and unavailable targets are explicit SKIPs with null measurements. Competitor frameworks are **not measured**. |
 | `profile --src <src.opu> [--frames N] [--degrade <60\|120>] [--json] [--markdown]` | Compiles once, then times one real `opurom-render` process per frame (1..1000, default 30). `--json` reports MEASURED p50/p95/min/max/total ms, integer `fpsX10` and a bounded ASCII sparkline; `--markdown` writes the same fixed-schema record as a two-column table. `--degrade <60\|120>` additionally runs the renderer with `--auto-degrade <hz>` over the SAME measured per-frame durations (fed through `--frame-ms`) and adds a `tiers` field listing how many frames ran at each quality tier (Full/Reduced/Minimal); the fixed key order is unchanged without the flag. A missing renderer is `SKIP` with a concrete reason. Software-raster timings on this host only. |
 | `profile --src <src.opu> --repeat N [--json]` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `<bench or profile --repeat command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
@@ -54,7 +55,6 @@ your shell and no npm packages are fetched.
 | `profile --frames N --markdown` | Emits a fixed two-column Markdown table with the same measured fields and sparkline, suitable for pasting into docs. |
 | `inspect <ir.json> [--select <id>] [--layers] [--json]` | Deterministic widget tree from a compiled IR: each node's id, kind, `component`/`key`, key props, computed `bounds` and `subtree` bounds, and visible-only `when`/`unless` conditions. Bounds come from `opurom-render --a11y` (never computed here). `--select <id>` prints just that node's ancestor path plus its subtree; `--layers` adds per-node effect layers and the frame-wide dirty-rect status; `--json` prints the same view with a stable key order. Unknown ids and a missing IR are clear errors. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
-| `CI tooling [dir]` | Scans Markdown under `dir` (default `.`) for CI checks, skipping `.git`, `node_modules`, `target`, `tmp` and `dist`. Prints `file:line: rule: text` findings and a summary, and exits 1 on any finding; otherwise prints the scanned file count. |
 | `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
 | `test --examples [--filter <name>] [--jobs N] [--verbose]` | Runs the registered example tests ctest-style: one `PASS` / `FAIL` / `SKIP` line per test, then `tests passed: X, failed: Y, skipped: Z, time N.Ns` and the failed test ids; exits 1 on any failure. Tests of one app run in registry order (render consumes the IR its compile test wrote); apps run in parallel, `--jobs` defaults to min(4, cpus). A missing source marked `required: false` is a SKIP with the reason; a missing `required: true` source is a FAIL. Commands use `{source}` / `{tmp}` placeholders and the `opuromc`, `opurom-render`, `node` tool aliases, so no machine-specific paths are stored in the registry. |
 
@@ -84,6 +84,7 @@ cli build --src ../opurom-examples/golden/counter.opu --target wechat --out tmp/
 cli build --src ../opurom-examples/golden/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-examples/golden/counter.opu --out tmp/bench --full
 cli bench --src ../opurom-examples/golden/counter.opu --compare
+cli bench --suite --runs 10 --json
 cli profile --src ../opurom-examples/golden/counter.opu --frames 30
 cli profile --src ../opurom-examples/golden/counter.opu --frames 30 --json
 cli profile --src ../opurom-examples/golden/counter.opu --frames 30 --markdown
@@ -440,7 +441,7 @@ cd opurom-cli && node --test
 
 These cover `lib/args.mjs` (flag parsing, target validation, port, boolean flags),
 `lib/paths.mjs` (executable and sibling-binary discovery), `lib/targets.mjs` (emitter list
-parsed from the framework rules, build-target validation), `lib/build.mjs` (compile/lower/cargo
+parsed from the built-in target list, build-target validation), `lib/build.mjs` (compile/lower/cargo
 orchestration plan, optimizer step, measured byte formatting, explicit fallback),
 `lib/fullstack.mjs` (full-build plan, shared types, artifact summary, artifact manifest
 write/verify, temp-path guard),
@@ -722,6 +723,35 @@ deliberately makes **no** fps, startup, throughput or competitor claims. See `pr
 measured sequential software-raster frame times and a derived fps for this host only, and
 `bench --compare` for the software-versus-GPU-backend comparison of two Opurom backends.
 
+## `bench --suite`: a measured Opurom-only baseline
+
+```sh
+node bin/opurom.mjs bench --suite --runs 10 --json
+node bin/opurom.mjs bench --suite --runs 10 --markdown
+```
+
+`--suite` uses the checked-in `test/fixtures/bench-suite.opu` fixture and resolves the real
+sibling `opuromc` and `opurom-render` binaries from `target/debug`, `target/release` or `PATH`.
+It never builds a sibling repository during measurement. Each of `--runs N` (1..1000) launches a
+fresh compiler process with its own IR output and a fresh renderer process with its own frame
+output; every sample is measured with `process.hrtime.bigint()` and rounded up to a whole
+millisecond. The suite then lowers that measured-run IR into all ten build targets — the nine
+`opuromc` targets plus `web-dom` — and reports real file counts and on-disk byte totals from
+`fs.statSync`.
+
+`--json` writes one fixed-schema object with deterministic key order and raw samples.
+`--markdown` writes the same record as a fixed field table plus a target table. `p50` and `p95`
+are nearest-rank values selected from those samples; `fpsX10` is integer arithmetic over the
+sample count and total milliseconds. Reports carry elapsed durations only, not calendar
+timestamps. `competitors` is always `not measured`: competitor binaries are unavailable on
+the host, no competitor binary is executed and no competitor number is estimated.
+
+Status is honest at both levels. `PASS` means both binaries ran and all ten targets produced
+nonempty files. `PARTIAL` keeps the measured compile/render statistics and names each
+unavailable target with a concrete reason and null bytes. A missing required binary is `SKIP`
+with null compile/render statistics and null target bytes. Invalid, negative or non-finite
+samples are errors, never estimates.
+
 ## `bench --compare`: software renderer vs GPU backend
 
 ```sh
@@ -857,11 +887,11 @@ states the host, the CPU, the OS and the raster kind instead of claiming an idle
 
 ## Machine-readable reports
 
-`--json` is accepted by `bench`, `bench --full`, `bench --compare`, `profile --frames` and
-`profile --repeat`. It writes exactly one JSON object on stdout; the human-readable
-report is unchanged when the flag is absent. `--markdown` is accepted by
-`profile --frames` and writes one fixed two-column table. Tool progress lines are
-suppressed so stdout remains parseable.
+`--json` is accepted by `bench`, `bench --full`, `bench --compare`, `bench --suite`,
+`profile --frames` and `profile --repeat`. It writes exactly one JSON object on stdout; the
+human-readable report is unchanged when the flag is absent. `--markdown` is accepted by
+`profile --frames` and `bench --suite`, and writes one fixed two-column table. Tool progress
+lines are suppressed so stdout remains parseable.
 
 `bench` and `profile --repeat` use the common schema. Top-level keys are always
 written in this order: `command`, `mode`, `frames`, `p50`, `p95`, `min`, `max`,
@@ -897,6 +927,14 @@ per field in the same order, with `null` for every unavailable measured value.
 `{tier, frames}` objects (Full/Reduced/Minimal, only non-empty tiers) replaying the
 renderer's rolling-window policy over the measured samples; `--markdown` lists it as
 `tier:frames` pairs. Without the flag the object is byte-identical to the schema above.
+
+`bench --suite --json` uses its own fixed schema in this order: `command`, `mode`, `status`,
+`runs`, `fixture`, `unit`, `sizeUnit`, `compile`, `render`, `artifacts`, `competitors`,
+`reason`. `compile` and `render` use the fixed order `status`, `measuredRuns`, `samples`,
+`p50`, `p95`, `min`, `max`, `totalMs`, `fpsX10`, `sparkline`, `reason`; `artifacts` uses
+`target`, `status`, `files`, `bytes`, `reason` in fixed target order. `competitors` is
+`not measured`, and `reason` states why competitor numbers are unavailable. `--markdown`
+emits the same fields and target rows.
 
 For the common schema, the CLI exit code still reports measurement availability.
 Frame-profile validation and render errors exit 1; a documented `SKIP` exits 0.
@@ -954,7 +992,7 @@ One real run of the checked-in fixture (`test/fixtures/widget-inspect.opu`, comp
 
 ```
 Opurom inspect widget tree (read-only; bounds from opurom-render --a11y)
-app: WidgetInspectorFixture (IR 0.1.0)
+app: WidgetInspectorFixture (ir 0.1.0)
 viewport: 800x600
 #0 Column bounds=[0,0,800,600] subtree=[0,0,800,600]
   props: align="center" gap=8 padding=16
@@ -997,18 +1035,19 @@ it. Other command output formats are unchanged.
   `dev --sync --clients N` (real N-client RFC 6455
   loopback verification with measured delivery times), `bench` (default shape, measured
   `--full` table and `--json` reports), `bench --compare` (software vs GPU backend, both MEASURED,
-  paired with the byte-equality result and a `--json` schema), `profile` (measured sequential
+  paired with the byte-equality result and a `--json` schema), `bench --suite` (real compile/render
+  subprocess samples, integer summary arithmetic and ten measured target sizes), `profile` (measured sequential
   software-raster frames, human `n/a` resource reasons, `--json` frame analysis with `fpsX10`
   and an ASCII sparkline, `--markdown`, and documented tool SKIPs),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated,
   `--json`),
   `inspect` (deterministic widget tree with computed bounds, visible-only conditions,
-  `--select`/`--layers`/`--json`), `CI tooling` (CI checks),
+  `--select`/`--layers`/`--json`),
    `size` (measured before/after byte table), `examples`
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (172 tests)
+- `node --test`: the dependency-free unit suite
   passes with the sibling compiler and renderer present. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, the stable JSON schemas, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
@@ -1016,7 +1055,7 @@ it. Other command output formats are unchanged.
   (computed bounds from a real fixture, `--select`, `--layers`, byte-identical output and a
   stable JSON schema), injected-clock frame statistics, hand-computed `fpsX10`, bounded
   sparklines, Markdown field order, bounds validation, missing-binary SKIP and a real-renderer
-  smoke check, the minifier, the measurement layer, the RFC 6455 vectors, cap
+  smoke check, benchmark-suite integer statistics and schemas with stub and real tools, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
   flag matrix, default byte identity, exact removal reports, measured size math, the
@@ -1051,7 +1090,8 @@ it. Other command output formats are unchanged.
   on the final `app.js`, and `new SourceMap(map)` parsed the v3 map. No number is invented.
 - If a sibling repo is genuinely absent (or has no `Cargo.toml` yet), `test` prints **SKIP**
   with the reason instead of a false pass. Unavailable `bench --full` rows, `profile`,
-  `profile --repeat` and `bench --compare` measurements print `n/a (reason)`.
+  `profile --repeat` and `bench --compare` measurements print `n/a (reason)`. `bench --suite`
+  uses `PARTIAL`/`SKIP` with null measurements and concrete reasons.
 - **Measurement scope**: `profile --repeat` measures this host's software raster only and states
   the CPU, the OS release, the Node version and the raster kind; it cannot observe machine
   idleness from inside the CLI and does not claim it. `bench --compare` compares two **Opurom**
@@ -1077,7 +1117,7 @@ bin/opurom.mjs        dispatcher (shebang, executable)
 bin/sync-hub.mjs      standalone loopback RFC 6455 sync hub helper
 lib/args.mjs          parseArgs / requireFlags / parsePort / flagEnabled
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
-lib/targets.mjs       8 emitters + contract parsing + build-target validation
+lib/targets.mjs       8 emitters + built-in target parsing + build-target validation
 lib/proc.mjs          spawnSync wrappers
 lib/doctor.mjs        toolchain report
 lib/init.mjs          scaffold
@@ -1087,6 +1127,7 @@ lib/service.mjs       generated-service env, offline-first build, spawn, health 
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart, multi-target preview
 lib/bench.mjs         measured timings + artifact sizes + bench --full table + JSON samples
+lib/bench_suite.mjs   real compile/render subprocess suite, integer stats, JSON/Markdown reports
 lib/async_runtime.mjs measured profile + injected clock + common JSON schema + inspect
 lib/frame_profile.mjs frame timing stats, fpsX10, sparkline, JSON and Markdown reports
 lib/inspect_tree.mjs  deterministic widget tree: bounds, conditions, --select/--layers/--json
@@ -1102,13 +1143,15 @@ templates/project/    multi-file app entry, two modules and README
 test/fixtures/inspect.opuir.json  inspector fixture
 test/fixtures/widget-inspect.*    real compiled IR + renderer a11y fixture for the widget tree
 test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm host)
+test/fixtures/bench-suite.opu     fixed input for the measured benchmark suite
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
+test/bench_suite.test.mjs  suite bounds, integer stats, schemas, SKIP/PARTIAL and real run (10)
 test/frame_profile.test.mjs  injected samples, schema, validation and real renderer (11)
 test/doctor.test.mjs   toolchain report tests (3)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (172 tests)
+test/*.test.mjs       node:test unit suite (196 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```
