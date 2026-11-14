@@ -6,7 +6,7 @@ import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
 import { runLintDocs } from '../lib/lint-docs.mjs';
-import { init } from '../lib/init.mjs';
+import { init, TEMPLATES } from '../lib/init.mjs';
 import { specFile } from '../lib/paths.mjs';
 import { targetsFromSpec, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
@@ -26,7 +26,9 @@ Usage: node bin/opurom.mjs <command> [options]
 Commands:
   doctor                          check rustc/cargo/node/opuromc/render/gpu
   targets                         list the IR emitters
-  init <dir> [--template counter|particles|project]
+  init --list
+                                  list starter templates
+  init <dir> [--template <name>]
                                   scaffold a new project (project has multiple .opu files)
   check <src.opu>                 type-check a source file
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
@@ -90,7 +92,12 @@ async function main(argv) {
       for (const name of targetsFromSpec(specFile('IR_SCHEMA.md'))) console.log(name);
       return 0;
     case 'init': {
+      if (flagEnabled(flags, 'list')) {
+        for (const name of TEMPLATES) console.log(name);
+        return 0;
+      }
       if (!positionals[1]) throw new Error('usage: init <dir>');
+      if (flags.template === true || flags.template === '') throw new Error('missing required option --template');
       const template = typeof flags.template === 'string' ? flags.template : 'counter';
       const dir = init(positionals[1], { template });
       const edit = path.join(dir, template === 'project' ? 'main.opu' : 'src');

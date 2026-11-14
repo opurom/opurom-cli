@@ -1,0 +1,21 @@
+// One source declares the UI, the persistent model and the HTTP API.
+app Fullstack {
+  model Task {
+    id: int primary
+    title: string
+    done: bool = false
+  }
+
+  api "/tasks" {
+    list Task
+    create Task
+  }
+
+  state created = 0
+
+  Column(p: 24, gap: 16, align: center) {
+    Text("Tasks", size: 28)
+    Text("Created: {created}", size: 16)
+    Button("Add") { created += 1 }
+  }
+}

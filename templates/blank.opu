@@ -1,0 +1,8 @@
+// A minimal starting screen with one state value and one label.
+app Blank {
+  state ready = 1
+
+  Column(p: 24, gap: 8, align: center) {
+    Text("Ready", size: 24)
+  }
+}

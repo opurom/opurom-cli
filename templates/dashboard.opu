@@ -1,0 +1,20 @@
+// A dashboard with a theme, summary rows and an interactive counter.
+app Dashboard {
+  state visits = 0
+  state status = "healthy"
+
+  theme { accent: "#097FEB", radius: 12 }
+
+  Column(p: 24, gap: 16, align: center) {
+    Text("Operations", size: 28)
+    Text("Status: {status}", size: 16)
+    Row(gap: 8) {
+      Text("Visits: {visits}", size: 18)
+      Button("Refresh") { visits += 1 }
+    }
+    Container(width: 320, height: 120, p: 16, rounded: 12,
+              gradient: "#097FEB,#101828") {
+      Text("Real-time overview", size: 18)
+    }
+  }
+}

@@ -24,7 +24,8 @@ your shell and no npm packages are fetched.
 | --- | --- |
 | `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden spec; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
 | `targets` | Prints the emitter names read from `opurom-spec/IR_SCHEMA.md`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the spec). |
-| `init <dir> [--template counter\|particles\|project]` | Scaffolds `opurom.json` (name + targets), a starter screen (`src/main.opu` from the counter template by default; `--template particles` writes `src/particles.opu` with a seeded particle field and a spring animation), `README.md`, `.gitignore`. `--template project` writes `main.opu`, two imported modules under `models/` and `views/`, and a README describing the layout. Refuses to overwrite a non-empty directory. |
+| `init --list` | Prints every starter template name, one per line, in stable alphabetical order. |
+| `init <dir> [--template <name>]` | Scaffolds `opurom.json` (name + targets), a starter screen, `README.md`, `.gitignore`, a 128x128 `logo.png`, its derived `favicon.ico` and an `index.html` favicon link. The image bytes are embedded in `lib/init.mjs`, so scaffolding needs no umbrella checkout. `blank` is a minimal screen, `dashboard` adds themed UI and interaction, `fullstack` declares a model and API; `counter`, `particles` and `project` remain available. Refuses to overwrite a non-empty directory. An unknown name is a clear error. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build --project <dir> --target <name> --out <dir>` | Resolves `<dir>/main.opu` and its `import` declarations into one program, then runs the same compile-and-lower pipeline. Accepts every target and build flag from `--src`. Errors clearly when `main.opu` is absent. |
@@ -61,6 +62,10 @@ cli() { node bin/opurom.mjs "$@"; }
 cli doctor
 cli targets
 cli init tmp/demo
+cli init --list
+cli init tmp/blank --template blank
+cli init tmp/dashboard --template dashboard
+cli init tmp/fullstack --template fullstack
 cli check tmp/demo/src/main.opu
 cli init tmp/field --template particles
 cli check tmp/field/src/particles.opu
@@ -90,6 +95,19 @@ cli test
 
 `package.json` scripts: `node --test` (`npm test`) runs the dependency-free unit suite;
 `node bin/opurom.mjs doctor` (`npm run doctor`) runs the toolchain check.
+
+## Starter templates
+
+`opurom init --list` prints `blank`, `counter`, `dashboard`, `fullstack`, `particles`
+and `project`, one name per line. `blank` is a minimal screen, `counter` adds two
+buttons, `dashboard` adds themed summary widgets, `fullstack` declares a persistent
+model and HTTP API, `particles` exercises the seeded particle field, and `project`
+uses imported modules. Each template writes a distinct compiling `.opu` entry.
+Generated files are deterministic and byte-identical across two runs with the same
+project name. The unit suite runs a real `opuromc check` subprocess for every
+template; when the compiler executable is absent, that check records a skip with
+its binary lookup reason. Every scaffold references the embedded `logo.png` in its
+README and favicon files.
 
 ## Multi-file projects
 
@@ -449,8 +467,11 @@ and compares IR bytes before/after `inspect`; `test/profile.test.mjs` drives stu
 and GPU-backend binaries; `test/sync.test.mjs` starts a real loopback TCP WebSocket hub without
 the sibling Rust server; `test/optimize.test.mjs` drives stub compilers without sibling Rust repos;
 `test/examples.test.mjs` covers the example registry, listing, filter, jobs cap, pool and summary
-math with trivial `node -e` commands. The 100 unit tests pass with **no sibling Rust repos
-present** (the shipped-registry and `opurom examples` checks skip when the sibling repo is absent).
+math with trivial `node -e` commands. `test/init.test.mjs` generates every template,
+compares two scaffolds byte for byte and invokes a real `opuromc check` when its
+executable is available. With the sibling compiler present, `node --test` reports 161
+passing tests and no skips. Without sibling Rust repos, compiler-dependent checks
+and the shipped-registry/examples checks report skips with concrete reasons.
 
 ## `test`: end-to-end checks
 
