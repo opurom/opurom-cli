@@ -167,7 +167,7 @@ test('the project template is registered alongside the single-file templates', (
     assert.equal(fs.readFileSync(path.join(project, 'main.opu'), 'utf8'),
       fs.readFileSync(path.join(CLI_ROOT, 'templates', 'project', 'main.opu'), 'utf8'));
     assert.throws(() => init(path.join(base, 'other'), { template: 'unknown' }),
-      /unknown template: unknown \(expected one of counter, particles, project\)/);
+      /unknown template: unknown \(expected one of blank, counter, dashboard, fullstack, particles, project\)/);
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

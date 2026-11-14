@@ -1,5 +1,9 @@
 # Opurom project
 
+![Opurom](logo.png)
+
+`logo.png` is the 128x128 project image; `favicon.ico` and `index.html` use it.
+
 A multi-file Opurom project. The compiler resolves the `import` declarations in
 [main.opu](main.opu) and merges declarations from
 [models/todo.opu](models/todo.opu) and
