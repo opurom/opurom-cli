@@ -13,6 +13,7 @@ import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
 import { bench } from '../lib/bench.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
+import { inspectTree } from '../lib/inspect_tree.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
@@ -55,7 +56,9 @@ Commands:
                                   measured software-raster frame timings (1..600)
   profile --src <src.opu> --repeat N [--json]
                                   measured repeated runs, warmup excluded and reported (1..600)
-  inspect <ir.json>               read-only layer + a11y trees side by side
+  inspect <ir.json> [--select <id>] [--layers] [--json]
+                                  widget tree (ids, kinds, bounds, visibility);
+                                  --select returns one node's ancestor path+subtree
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
@@ -186,8 +189,10 @@ async function main(argv) {
     }
     case 'inspect': {
       const ir = positionals[1];
-      if (!ir) throw new Error('usage: inspect <ir.json>');
-      return inspect({ ir });
+      if (!ir) throw new Error('usage: inspect <ir.json> [--select <id>] [--layers] [--json]');
+      const select = flags.select === undefined ? undefined
+        : (flags.select === true ? '' : String(flags.select));
+      return inspectTree({ ir, select, layers: flagEnabled(flags, 'layers'), json: flagEnabled(flags, 'json') });
     }
     case 'examples':
       examplesList();

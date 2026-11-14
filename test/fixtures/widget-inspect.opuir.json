@@ -1,0 +1,153 @@
+{
+  "app": "WidgetInspectorFixture",
+  "ir": "0.1",
+  "state": [
+    {
+      "init": false,
+      "name": "dark",
+      "type": "bool"
+    },
+    {
+      "init": 2,
+      "name": "count",
+      "type": "int"
+    }
+  ],
+  "theme": {
+    "accent": "#097FEB",
+    "mode": "system",
+    "radius": 12
+  },
+  "tree": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [],
+            "events": {},
+            "id": 2,
+            "kind": "Text",
+            "props": {
+              "size": 24,
+              "value": "Inspect {count}"
+            }
+          }
+        ],
+        "events": {},
+        "id": 1,
+        "kind": "Container",
+        "props": {
+          "height": 28,
+          "width": 160
+        }
+      },
+      {
+        "children": [
+          {
+            "children": [
+              {
+                "children": [],
+                "events": {},
+                "id": 5,
+                "kind": "Text",
+                "props": {
+                  "color": "#FFFFFF",
+                  "size": 18,
+                  "value": "Card"
+                }
+              }
+            ],
+            "events": {},
+            "id": 4,
+            "kind": "Container",
+            "props": {
+              "height": 24,
+              "width": 80
+            }
+          }
+        ],
+        "events": {},
+        "id": 3,
+        "kind": "Card",
+        "props": {
+          "animate": "none",
+          "border": "#FFFFFF",
+          "color": "#101828",
+          "glass": true,
+          "gradient": "#097FEB,#101828",
+          "margin": 4,
+          "opacity": 0.95,
+          "padding": 12,
+          "radius": 8,
+          "shadow": 2
+        }
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "events": {},
+            "id": 7,
+            "kind": "Text",
+            "props": {
+              "value": "dark"
+            },
+            "when": "dark"
+          }
+        ],
+        "events": {},
+        "id": 6,
+        "kind": "Container",
+        "props": {
+          "height": 24,
+          "width": 80
+        },
+        "when": "dark"
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "events": {},
+            "id": 9,
+            "kind": "Text",
+            "props": {
+              "value": "light"
+            },
+            "unless": "dark"
+          }
+        ],
+        "events": {},
+        "id": 8,
+        "kind": "Container",
+        "props": {
+          "height": 20,
+          "width": 60
+        },
+        "unless": "dark"
+      },
+      {
+        "children": [],
+        "events": {
+          "tap": {
+            "op": "toggle",
+            "target": "dark"
+          }
+        },
+        "id": 10,
+        "kind": "Button",
+        "props": {
+          "label": "Toggle"
+        }
+      }
+    ],
+    "events": {},
+    "id": 0,
+    "kind": "Column",
+    "props": {
+      "align": "center",
+      "gap": 8,
+      "padding": 16
+    }
+  }
+}

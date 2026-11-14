@@ -1,0 +1,13 @@
+[
+  {"id":0,"role":"none","label":"","bounds":[0,0,800,600],"hidden":false},
+  {"id":1,"role":"none","label":"","bounds":[320,16,160,28],"hidden":false},
+  {"id":2,"role":"heading","label":"Inspect 2","bounds":[320,16,160,28],"hidden":false},
+  {"id":3,"role":"none","label":"","bounds":[20,56,760,193],"hidden":false},
+  {"id":4,"role":"none","label":"","bounds":[32,68,80,24],"hidden":false},
+  {"id":5,"role":"text","label":"Card","bounds":[32,68,72,24],"hidden":false},
+  {"id":6,"role":"none","label":"","bounds":[360,255,80,24],"hidden":true},
+  {"id":7,"role":"text","label":"dark","bounds":[360,255,48,24],"hidden":true},
+  {"id":8,"role":"none","label":"","bounds":[370,261,60,20],"hidden":false},
+  {"id":9,"role":"text","label":"light","bounds":[370,261,60,20],"hidden":false},
+  {"id":10,"role":"button","label":"Toggle","bounds":[352,289,96,142],"hidden":false}
+]

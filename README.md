@@ -49,7 +49,7 @@ your shell and no npm packages are fetched.
 | `profile --src <src.opu> [--frames N] [--json]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
 | `profile --src <src.opu> --repeat N [--json]` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
 | `<bench or profile command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
-| `inspect <ir.json>` | Read-only layer tree (id, kind, bounds, frame-wide dirty-rect status) beside the deterministic a11y tree from `opurom-render --a11y`. Never mutates the IR file. |
+| `inspect <ir.json> [--select <id>] [--layers] [--json]` | Deterministic widget tree from a compiled IR: each node's id, kind, `component`/`key`, key props, computed `bounds` and `subtree` bounds, and visible-only `when`/`unless` conditions. Bounds come from `opurom-render --a11y` (never computed here). `--select <id>` prints just that node's ancestor path plus its subtree; `--layers` adds per-node effect layers and the frame-wide dirty-rect status; `--json` prints the same view with a stable key order. Unknown ids and a missing IR are clear errors. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 | `lint-docs [dir]` | Scans Markdown under `dir` (default `.`) for publication red lines, skipping `.git`, `node_modules`, `target`, `tmp` and `dist`. Prints `file:line: rule: text` findings and a summary, and exits 1 on any finding; otherwise prints the scanned file count. |
 | `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
@@ -80,6 +80,8 @@ cli bench --src ../opurom-spec/counter.opu --compare
 cli profile --src ../opurom-spec/counter.opu --frames 30
 cli profile --src ../opurom-spec/counter.opu --repeat 10
 cli inspect ../opurom-spec/counter.opuir.json
+cli inspect ../opurom-spec/counter.opuir.json --select 2 --layers
+cli inspect ../opurom-spec/counter.opuir.json --json
 # Long-running: cli dev --src tmp/demo/src/main.opu --sync --port 5178
 # Start a hub first, then: cli dev --sync --clients 8 --port 5178
 # Long-running: cli dev --src tmp/demo/src/main.opu --targets web,wechat --port 5179
@@ -424,8 +426,10 @@ write/verify, temp-path guard),
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
 (SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping),
 `lib/async_runtime.mjs`
-(percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting,
-read-only `inspect`), `lib/minify.mjs` (minifier literal edge cases, `node --check` on every
+(percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting),
+`lib/inspect_tree.mjs` (widget tree text/JSON from a real compiled fixture: ids, kinds,
+computed bounds/subtree bounds, visible-only conditions, `--select`, `--layers`, byte-identical
+output and a stable JSON key order), `lib/minify.mjs` (minifier literal edge cases, `node --check` on every
 emitter's real output, golden web app behaviour in a DOM harness, measured size report math,
 unused asset removal, byte-identical default build), `lib/profile.mjs` (repeat-count validation,
 warmup-exclusion arithmetic, percentile math on known arrays, the environment description, the
@@ -824,6 +828,73 @@ frame-wide rect count, not an invented per-layer rect list. If the renderer is u
 `--a11y` fails, the command prints a clear diagnostic and exits nonzero. This is not OS
 screen-reader integration.
 
+## `inspect`: deterministic widget tree
+
+```sh
+node bin/opurom.mjs inspect test/fixtures/widget-inspect.opuir.json
+node bin/opurom.mjs inspect test/fixtures/widget-inspect.opuir.json --select 3 --layers
+node bin/opurom.mjs inspect test/fixtures/widget-inspect.opuir.json --json
+```
+
+`inspect` reads the IR as bytes, parses it, and asks `opurom-render --a11y` for the
+authoritative per-node bounds in one real 800x600 software-raster frame. The tree is
+printed in pre-order: each node's `#id kind`, optional `component=/key=`, its own
+`bounds`, the `subtree` bounds (its rect unioned with its descendants), a `hidden` marker,
+and the visible-only `when`/`unless` conditions that come from `if`/`else`. Scalar key
+props and event names are listed beneath each node. Geometry is never recomputed here, so
+identical IR gives byte-identical output. The IR bytes are compared before and after; a
+change is a read-only violation.
+
+- `--select <id>` prints only that node's ancestor path (so the selected node is shown in
+  context) plus its own subtree. An id that is not in the IR is a clear error
+  (`unknown node id: <id>`), as is a missing IR file.
+- `--layers` adds a `layer` row per node with its effect layers (box `shadow`, frosted
+  `glass`, a two-stop `gradient`, reduced `opacity` and any `props.effects` kinds) and the
+  frame-wide dirty-rect status. The software renderer reports one frame-wide dirty rect
+  count and no per-node rect list, so the tree states that rather than inventing per-node
+  rects; the whole-frame `effect_*` command count comes from `--commands`.
+- `--json` prints the same view as one object with a fixed key order
+  (`command`, `mode`, `app`, `viewport`, `selected`, `nodes`; `--layers` adds `dirtyRects`
+  and `effectCommands`). Each node is `id`, `depth`, `kind`, `component`, `key`,
+  `children`, `props`, `bounds`, `subtreeBounds`, `hidden`, `conditions`, `events`, with
+  `layers`/`dirtyRects` appended under `--layers`.
+
+One real run of the checked-in fixture (`test/fixtures/widget-inspect.opu`, compiled with
+`opuromc 0.2.0`; bounds from the real renderer) produced:
+
+```
+OPUROM inspect widget tree (read-only; bounds from opurom-render --a11y)
+app: WidgetInspectorFixture (ir 0.1)
+viewport: 800x600
+#0 Column bounds=[0,0,800,600] subtree=[0,0,800,600]
+  props: align="center" gap=8 padding=16
+  #1 Container bounds=[320,16,160,28] subtree=[0,0,480,44]
+    props: height=28 width=160
+    #2 Text bounds=[320,16,160,28] subtree=[320,16,160,28]
+      props: size=24 value="Inspect {count}"
+  #3 Card bounds=[20,56,760,193] subtree=[0,0,780,249]
+    props: animate="none" border="#FFFFFF" color="#101828" glass=true gradient="#097FEB,#101828" margin=4 opacity=0.95 padding=12 radius=8 shadow=2
+    #4 Container bounds=[32,68,80,24] subtree=[0,0,112,92]
+      props: height=24 width=80
+      #5 Text bounds=[32,68,72,24] subtree=[32,68,72,24]
+        props: color="#FFFFFF" size=18 value="Card"
+  #6 Container bounds=[360,255,80,24] subtree=[0,0,440,279] hidden when=dark
+    props: height=24 width=80
+    #7 Text bounds=[360,255,48,24] subtree=[360,255,48,24] hidden when=dark
+      props: value="dark"
+  #8 Container bounds=[370,261,60,20] subtree=[0,0,430,281] unless=dark
+    props: height=20 width=60
+    #9 Text bounds=[370,261,60,20] subtree=[370,261,60,20] unless=dark
+      props: value="light"
+  #10 Button bounds=[352,289,96,142] subtree=[352,289,96,142]
+    props: label="Toggle"
+    events: tap
+```
+
+Those bounds are the renderer's own numbers for that IR. The earlier read-only
+layer/a11y side-by-side view that `inspect` used to print is gone; the new tree supersedes
+it. Other command output formats are unchanged.
+
 ## Status
 
 - **Implemented and unit-tested now**: arg parsing, path/tool discovery, lazy cargo builds
@@ -840,17 +911,19 @@ screen-reader integration.
   software-raster frames with honest `n/a` and `--json`),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated,
   `--json`),
-  `inspect` (read-only layer/a11y trees), `lint-docs` (publication checks for Markdown),
+  `inspect` (deterministic widget tree with computed bounds, visible-only conditions,
+  `--select`/`--layers`/`--json`), `lint-docs` (publication checks for Markdown),
    `size` (measured before/after byte table), `examples`
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (122 tests)
+- `node --test`: the dependency-free unit suite (146 tests)
   passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
   formatting, the stable JSON schema, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
-  `dev --sync` SSE server, percentile math, frame caps, layer formatting, an `inspect` byte
-  comparison, the minifier, the measurement layer, the RFC 6455 vectors, cap
+  `dev --sync` SSE server, percentile math, frame caps, layer formatting, the widget tree
+  (computed bounds from a real fixture, `--select`, `--layers`, byte-identical output and a
+  stable JSON schema), the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
   flag matrix, default byte identity, exact removal reports, measured size math, the
@@ -921,6 +994,7 @@ lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart, multi-target preview
 lib/bench.mjs         measured timings + artifact sizes + bench --full table + JSON samples
 lib/async_runtime.mjs measured profile + JSON schema + read-only layer/a11y inspect
+lib/inspect_tree.mjs  deterministic widget tree: bounds, conditions, --select/--layers/--json
 lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size report
 lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality + JSON
 lib/sync.mjs          RFC 6455 codec + loopback hub + N-client sync verification
@@ -931,6 +1005,7 @@ templates/main.opu    counter-based scaffold source
 templates/particles.opu  seeded particle-field scaffold source
 templates/project/    multi-file app entry, two modules and README
 test/fixtures/inspect.opuir.json  inspector fixture
+test/fixtures/widget-inspect.*    real compiled IR + renderer a11y fixture for the widget tree
 test/fixtures/emit/*.js.fixture   real emitter outputs (web, mini programs, wasm host)
 test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
@@ -938,5 +1013,6 @@ test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
 test/doctor.test.mjs   toolchain report tests (3)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (133 tests)
+test/*.test.mjs       node:test unit suite (146 tests)
+test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```

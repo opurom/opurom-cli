@@ -1,0 +1,25 @@
+app WidgetInspectorFixture {
+  state dark = false
+  state count = 2
+
+  Column(gap: 8, padding: 16, align: center) {
+    Container(width: 160, height: 28) {
+      Text("Inspect {count}", size: 24)
+    }
+    Card(p: 12, m: 4, bg: "#101828", rounded: 8, shadow: 2, gradient: "#097FEB,#101828", glass: true, opacity: 0.95, border: "#FFFFFF", animate: none) {
+      Container(width: 80, height: 24) {
+        Text("Card", color: "#FFFFFF", size: 18)
+      }
+    }
+    if (dark) {
+      Container(width: 80, height: 24) {
+        Text("dark")
+      }
+    } else {
+      Container(width: 60, height: 20) {
+        Text("light")
+      }
+    }
+    Button("Toggle") { dark.toggle() }
+  }
+}
