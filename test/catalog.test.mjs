@@ -206,7 +206,19 @@ test('dev --sync sends snapshots and identical reload frames to two SSE clients'
   const binDir = path.join(base, 'bin');
   const logFile = path.join(base, 'opuromc.log');
   const src = path.join(base, 'main.opu');
-  writeStub(binDir, logFile, `printf '%s\\n' 'unused' >&2; exit 1`);
+  // Distinct IR per compile so a source change is a real reload (not a no-op).
+  fs.mkdirSync(binDir, { recursive: true });
+  const syncStub = `#!/bin/sh
+printf '%s\\n' "$*" >> '${logFile}'
+case "$1" in
+  compile)
+    n=0; if [ -f '${logFile}.n' ]; then n=$(cat '${logFile}.n'); fi; n=$((n + 1)); echo "$n" > '${logFile}.n'
+    printf '%s\\n' "{\\"ir\\":\\"0.1\\",\\"app\\":\\"Counter\\",\\"state\\":[],\\"tree\\":{\\"id\\":$n},\\"theme\\":{}}" > "$4" ;;
+  target) mkdir -p "$6"; cp "$2" "$6/ir.json"; printf '%s\\n' '<html><head></head></html>' > "$6/index.html" ;;
+  *) exit 2 ;;
+esac
+`;
+  fs.writeFileSync(path.join(binDir, 'opuromc'), syncStub, { mode: 0o755 });
   fs.writeFileSync(src, 'app Counter { state count = 0 }\n');
   const oldPath = process.env.PATH;
   process.env.PATH = `${binDir}${path.delimiter}${oldPath ?? ''}`;

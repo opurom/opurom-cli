@@ -424,7 +424,9 @@ orchestration plan, optimizer step, measured byte formatting, explicit fallback)
 write/verify, temp-path guard),
 `lib/service.mjs` (env/port/db handling, service binary discovery), `lib/bench.mjs`
 (markdown table, byte formatting, exact measured rows and `n/a (reason)`), `lib/dev.mjs`
-(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping),
+(SSE client injection, path-traversal guard, SSE framing, sync hub bookkeeping, watch-loop
+reload classification), `lib/hot_reload.mjs` (pure `decideReload` IR differ, deterministic
+reload log line, clock-injected event debouncer),
 `lib/async_runtime.mjs`
 (percentile math, frame caps, measured/`n/a` profile reports, deterministic layer formatting),
 `lib/inspect_tree.mjs` (widget tree text/JSON from a real compiled fixture: ids, kinds,
@@ -496,7 +498,7 @@ kill $DEV_PID
 ```
 
 `/health` returns JSON (`ok`, `src`, `port`, `clients`, `rebuilds`, `lastBuild`, `lastError`,
-plus a `backend` object with `status`, `port`, `restarts` and `lastError`).
+`reloads`, `lastReload`, plus a `backend` object with `status`, `port`, `restarts` and `lastError`).
 The server watches the source directory with `fs.watch`, debounces changes, re-runs
 compile + `web` lowering, and broadcasts `reload` (or `build-error`) to every SSE client.
 When the backend toolchain is present, the same change also regenerates the service crate,
@@ -514,6 +516,35 @@ restores and re-renders from the same snapshot inside its own script instead of 
 are served from a temp dir under `tmp/` (gitignored), with a path-traversal guard.
 `SIGINT`/`SIGTERM` close the watcher, clients, backend child and server, and remove the temp
 output.
+
+## Hot reload decisions: hot vs full
+
+Every watched change is classified from the compiled IR, so the dev server reports whether
+the rebuild kept application state or reset it. `lib/hot_reload.mjs` exposes a pure
+`decideReload(prevIr, nextIr) -> { kind, reason }`:
+
+- `none` (`unchanged`): the two IRs are identical, so nothing is reloaded.
+- `hot` (`tree-changed`): only the component tree changed (props or text) while the state
+  schema is unchanged. The tree re-renders over the preserved state.
+- `full` (`state-schema-changed`): a state name, type or initial value changed, so the whole
+  program reloads and the preserved snapshot is discarded.
+- `full` for `shell-changed` (app name, theme, models or api), `initial-build`,
+  `removed-ir` and `no-ir` (the emitter exposes no IR file).
+
+The watch loop debounces rapid file events and logs one deterministic line per change with no
+timestamps in the assertable fields:
+
+```text
+dev: hot-reload #1 hot (tree-changed) main.opu (0 clients)
+dev: hot-reload #2 full (state-schema-changed) main.opu (0 clients)
+dev: no reload for main.opu (unchanged)
+```
+
+`/health` reports the running `reloads` count and a `lastReload` object with `kind` and
+`reason`; each `event: reload` frame carries the same `kind` and `reason`. The debouncer
+(`createDebouncer`) takes an injected clock (`setTimer`/`clearTimer`) so the coalescing is
+tested without real time. When no IR file is produced, `dev` falls back to a plain full
+reload, so the previous watch behavior is preserved.
 
 ## `dev --sync`: dev preview hub
 
