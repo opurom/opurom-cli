@@ -47,9 +47,11 @@ your shell and no npm packages are fetched.
 | `bench --src <src.opu> [--out <dir>] [--full] [--json]` | Measured compile / lowering / build times and on-disk artifact sizes, printed as a markdown table. No fps, startup or throughput claims. |
 | `bench --src <src.opu> [--out <dir>] --full [--json]` | Adds measured render, native/wasm build, one service `GET /health` request and exact artifact byte sizes. Unavailable measurements are printed as `n/a (reason)`. |
 | `bench --src <src.opu> --compare [--json]` | Renders the SAME scene through the software renderer **and** the GPU backend (`opurom-gpu`), reports both MEASURED times and the byte-equality result of the two outputs. A speed ratio is only printed when the outputs are byte-equal. |
-| `profile --src <src.opu> [--frames N] [--json]` | Compiles once, then runs N real `opurom-render` frames and reports MEASURED p50/p95/min/max ms plus achieved fps derived from those frame times. N defaults to 30 and is capped at 600. Software-raster timings on this host only. |
+| `profile --src <src.opu> [--frames N] [--json] [--markdown]` | Compiles once, then times one real `opurom-render` process per frame (1..1000, default 30). `--json` reports MEASURED p50/p95/min/max/total ms, integer `fpsX10` and a bounded ASCII sparkline; `--markdown` writes the same fixed-schema record as a two-column table. A missing renderer is `SKIP` with a concrete reason. Software-raster timings on this host only. |
 | `profile --src <src.opu> --repeat N [--json]` | Runs the SAME work N times, discards a documented warmup count (reported as `warmup excluded: 2`) and reports the MEASURED median, p95, min, max and achieved fps of the measured runs only, plus the environment description. N defaults to 10 and accepts 1..600. |
-| `<bench or profile command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
+| `<bench or profile --repeat command> --json` | Emits exactly one stable-schema JSON object with measured milliseconds instead of the human-readable report. Field order and unavailable values are described below. |
+| `profile --frames N --json` | Emits the dedicated frame-profile object with deterministic key order, derived `fpsX10` and a bounded ASCII sparkline. |
+| `profile --frames N --markdown` | Emits a fixed two-column Markdown table with the same measured fields and sparkline, suitable for pasting into docs. |
 | `inspect <ir.json> [--select <id>] [--layers] [--json]` | Deterministic widget tree from a compiled IR: each node's id, kind, `component`/`key`, key props, computed `bounds` and `subtree` bounds, and visible-only `when`/`unless` conditions. Bounds come from `opurom-render --a11y` (never computed here). `--select <id>` prints just that node's ancestor path plus its subtree; `--layers` adds per-node effect layers and the frame-wide dirty-rect status; `--json` prints the same view with a stable key order. Unknown ids and a missing IR are clear errors. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 | `lint-docs [dir]` | Scans Markdown under `dir` (default `.`) for publication red lines, skipping `.git`, `node_modules`, `target`, `tmp` and `dist`. Prints `file:line: rule: text` findings and a summary, and exits 1 on any finding; otherwise prints the scanned file count. |
@@ -83,6 +85,8 @@ cli build --src ../opurom-spec/counter.opu --target native --out tmp/native
 cli bench --src ../opurom-spec/counter.opu --out tmp/bench --full
 cli bench --src ../opurom-spec/counter.opu --compare
 cli profile --src ../opurom-spec/counter.opu --frames 30
+cli profile --src ../opurom-spec/counter.opu --frames 30 --json
+cli profile --src ../opurom-spec/counter.opu --frames 30 --markdown
 cli profile --src ../opurom-spec/counter.opu --repeat 10
 cli inspect ../opurom-spec/counter.opuir.json
 cli inspect ../opurom-spec/counter.opuir.json --select 2 --layers
@@ -464,14 +468,15 @@ fake registry) and the e2e output parsers.
 `test/catalog.test.mjs` also drives stub compilers,
 two SSE clients and a real local `dev --sync` server; `test/async_runtime.test.mjs` drives a stub renderer
 and compares IR bytes before/after `inspect`; `test/profile.test.mjs` drives stub compiler, renderer
-and GPU-backend binaries; `test/sync.test.mjs` starts a real loopback TCP WebSocket hub without
+and GPU-backend binaries; `test/frame_profile.test.mjs` injects clocks and samples, checks the
+frame schema and validation, and runs a small real-renderer smoke check; `test/sync.test.mjs` starts a real loopback TCP WebSocket hub without
 the sibling Rust server; `test/optimize.test.mjs` drives stub compilers without sibling Rust repos;
 `test/examples.test.mjs` covers the example registry, listing, filter, jobs cap, pool and summary
 math with trivial `node -e` commands. `test/init.test.mjs` generates every template,
 compares two scaffolds byte for byte and invokes a real `opuromc check` when its
-executable is available. With the sibling compiler present, `node --test` reports 161
-passing tests and no skips. Without sibling Rust repos, compiler-dependent checks
-and the shipped-registry/examples checks report skips with concrete reasons.
+executable is available. With the sibling compiler and renderer present, `node --test` reports 172
+passing tests and no skips. Without sibling Rust repos, compiler-dependent checks,
+the shipped-registry/examples checks and the frame-profile smoke check report skips with concrete reasons.
 
 ## `test`: end-to-end checks
 
@@ -769,18 +774,34 @@ binary is executed and no competitor number is estimated. There is no device mat
 
 ```sh
 node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --frames 30
+node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --frames 30 --json
+node bin/opurom.mjs profile --src ../opurom-spec/counter.opu --frames 30 --markdown
 ```
 
 The command compiles the `.opu` source once, then launches `opurom-render` once per requested
-frame at 800x600 and times each real process with `performance.now()`. It reports MEASURED
-p50/p95/min/max milliseconds and achieved fps computed as
-`frames / sum(measured frame times)`. The report also states the renderer process's peak
-resident set size and user+system CPU time, measured with the host's `/usr/bin/time` (`-l` on
-macOS, `-v` on Linux, falling back to a `ps`-poll when it is absent) and reported as `n/a
-(reason)` when the host exposes neither value. Every frame is checked for renderer `digest=` / `dirty=`
-output and a non-empty PPM. `--frames` defaults to 30 and accepts 1..600; values outside that
-range fail with a clear error. If a tool or any frame is unavailable, every statistic prints
-`n/a (reason)` and the command exits nonzero. No number is invented.
+frame at 800x600 and times each real process with `performance.now()`. Every frame is checked
+for renderer `digest=` / `dirty=` output and a non-empty PPM. `--frames` defaults to 30 and
+accepts 1..1000; values outside that range fail with a clear error. `--repeat` keeps its
+separate 1..600 bound.
+
+The human report keeps the MEASURED p50/p95/min/max milliseconds, achieved fps computed as
+`frames * 1000 / sum(measured frame times)`, renderer peak resident set size and user+system
+CPU time. Resource metrics come from the host's `/usr/bin/time` (`-l` on macOS, `-v` on Linux,
+falling back to a `ps`-poll when it is absent) and report `n/a (reason)` when the host exposes
+neither value.
+
+`--json` writes one frame-profile object with measured p50/p95/min/max/total milliseconds,
+integer `fpsX10` and a bounded ASCII sparkline. Field order is fixed in the machine-readable
+reports section below. `fpsX10` is `round(10 * frames * 1000 / totalMs)`. The sparkline maps at
+most 24 chronological buckets to `_.:-=+*#%@` using each bucket's mean, normalized between the
+smallest and largest bucket means; a flat series uses the middle level. `--markdown` writes the
+same record as a two-column table and takes precedence when both machine flags are present.
+
+When a renderer or compiler executable cannot be found, both machine modes produce
+`status: SKIP`, `frames: 0`, `null` measured fields and a concrete reason, then exit 0.
+Invalid frame counts, missing sources, non-finite or negative samples, compile failures and
+incomplete renderer output are errors. In the human report, a missing tool or failed frame
+prints `n/a (reason)` and exits nonzero. No number is invented.
 
 These are software-raster timings on this host, **NOT a device/competitor benchmark**. Each
 measurement includes process launch and PPM output. There is no device matrix, no
@@ -836,34 +857,47 @@ states the host, the CPU, the OS and the raster kind instead of claiming an idle
 
 ## Machine-readable reports
 
-`--json` is accepted by `bench`, `bench --full`, `bench --compare`, `profile` and
+`--json` is accepted by `bench`, `bench --full`, `bench --compare`, `profile --frames` and
 `profile --repeat`. It writes exactly one JSON object on stdout; the human-readable
-report is unchanged when the flag is absent. Tool progress lines are also suppressed
-so stdout remains parseable.
+report is unchanged when the flag is absent. `--markdown` is accepted by
+`profile --frames` and writes one fixed two-column table. Tool progress lines are
+suppressed so stdout remains parseable.
 
-Top-level keys are always written in this order: `command`, `mode`, `frames`,
-`p50`, `p95`, `min`, `max`, `unit`, `memory`, `cpu`, `backends`, `byteEqual`,
-`reason`. `frames` is
-the count of real timing samples behind the statistics. `p50`, `p95`, `min`, and
-`max` are derived from those samples and are milliseconds; `unit` is always `ms`.
-`mode` is `single` for `bench` and `profile`, `full` for `bench --full`, `repeat`
-for `profile --repeat`, and `compare` for `bench --compare`.
+`bench` and `profile --repeat` use the common schema. Top-level keys are always
+written in this order: `command`, `mode`, `frames`, `p50`, `p95`, `min`, `max`,
+`unit`, `memory`, `cpu`, `backends`, `byteEqual`, `reason`. `frames` is the count of
+real timing samples behind the statistics. `p50`, `p95`, `min`, and `max` are
+derived from those samples and are milliseconds; `unit` is always `ms`. `mode` is
+`single` for `bench`, `full` for `bench --full`, `repeat` for `profile --repeat`,
+and `compare` for `bench --compare`.
 
 `memory` and `cpu` describe the renderer process of the measured runs. `memory`
 has the keys `peakRssKb`, `peakRssMb` and `reason`; `cpu` has `userMs`,
 `systemMs`, `totalMs`, `maxTotalMs` and `reason`. A command that does not measure
 the renderer process leaves both metric objects with `null` values and a `reason`;
-the profile commands fill them from the measured runs.
+`profile --repeat` fills them from the measured runs.
 
 `backends` is empty except in `compare` mode, where it holds `software` and `gpu`
 objects in that order. Each backend object has the stable keys `name`, `frames`,
 `p50`, `p95`, `min`, `max`, `reason`. `byteEqual` is `true`, `false` or `null` when
 byte equality could not be checked. If no timing could be measured, the statistic
 fields are `null` and `reason` carries the cause. Invalid or non-finite samples
-make the report fail rather than substitute estimates.
+make the common report fail rather than substitute estimates.
 
-The CLI exit code still reports measurement availability. JSON mode does not add
-fps, startup, throughput, device or competitor claims.
+`profile --frames --json` uses a dedicated fixed schema in this order: `command`,
+`mode`, `status`, `src`, `requestedFrames`, `frames`, `p50`, `p95`, `min`, `max`,
+`totalMs`, `fpsX10`, `sparkline`, `unit`, `reason`. `command` is `profile`, `mode`
+is `frames`, `unit` is `ms`, and `status` is `PASS` or `SKIP`. `frames` is the count
+of real measured samples and is `0` on `SKIP`. `p50`, `p95`, `min`, `max` and
+`totalMs` are measured milliseconds; `fpsX10` is ten times the derived fps rounded
+to an integer; `sparkline` has at most 24 ASCII buckets. `reason` is `null` on
+`PASS` and carries a concrete lookup reason on `SKIP`. `--markdown` writes one row
+per field in the same order, with `null` for every unavailable measured value.
+
+For the common schema, the CLI exit code still reports measurement availability.
+Frame-profile validation and render errors exit 1; a documented `SKIP` exits 0.
+The common JSON modes do not add fps, startup, throughput, device or competitor
+claims. Frame-profile `fpsX10` is derived only from measured frame times.
 
 ## `inspect`: read-only layer and a11y trees
 
@@ -960,7 +994,8 @@ it. Other command output formats are unchanged.
   loopback verification with measured delivery times), `bench` (default shape, measured
   `--full` table and `--json` reports), `bench --compare` (software vs GPU backend, both MEASURED,
   paired with the byte-equality result and a `--json` schema), `profile` (measured sequential
-  software-raster frames with honest `n/a` and `--json`),
+  software-raster frames, human `n/a` resource reasons, `--json` frame analysis with `fpsX10`
+  and an ASCII sparkline, `--markdown`, and documented tool SKIPs),
   `profile --repeat` (measured repeated work, warmup excluded and reported, environment stated,
   `--json`),
   `inspect` (deterministic widget tree with computed bounds, visible-only conditions,
@@ -969,13 +1004,15 @@ it. Other command output formats are unchanged.
   (ctest-style example registry listing), `test --examples` (parallel example test runner), `test`
   orchestration (incl. full-stack, wasm and minified-build checks), README, own git repo,
   clean tree.
-- `node --test`: the dependency-free unit suite (146 tests)
-  passes with **no sibling Rust repo present**. It covers the example registry schema, listing,
+- `node --test`: the dependency-free unit suite (172 tests)
+  passes with the sibling compiler and renderer present. It covers the example registry schema, listing,
   filter, jobs cap, pool and summary math, plus the new flags, exact measured
-  formatting, the stable JSON schema, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
+  formatting, the stable JSON schemas, real-process JSON reports, optimizer success/fallback, sync hub bookkeeping, a real two-client
   `dev --sync` SSE server, percentile math, frame caps, layer formatting, the widget tree
   (computed bounds from a real fixture, `--select`, `--layers`, byte-identical output and a
-  stable JSON schema), the minifier, the measurement layer, the RFC 6455 vectors, cap
+  stable JSON schema), injected-clock frame statistics, hand-computed `fpsX10`, bounded
+  sparklines, Markdown field order, bounds validation, missing-binary SKIP and a real-renderer
+  smoke check, the minifier, the measurement layer, the RFC 6455 vectors, cap
   validation, N=2/N=8 same-delta runs, different/dropped-delta failures, no-hub SKIP,
   real loopback socket cleanup, reachability fixtures, Source Map v3 parsing, the 16-way
   flag matrix, default byte identity, exact removal reports, measured size math, the
@@ -998,7 +1035,8 @@ it. Other command output formats are unchanged.
   reload frame after a source change; real N=2 and N=8 RFC 6455 loopback clients each received
   the same state delta with MEASURED per-client `hrtime` delivery times and clean socket
   shutdown; `profile` ran real renderer frames and printed MEASURED
-  percentiles plus derived fps; `inspect` printed the side-by-side trees from
+  percentiles plus derived fps; `profile --frames 3 --json` ran three real renderer processes
+  and printed positive finite percentiles, `fpsX10` and a three-bucket sparkline; `inspect` printed the side-by-side trees from
   `opurom-render --a11y` without changing IR bytes; `profile --repeat 10` ran ten real renderer
   runs, excluded two warmup runs and printed the measured statistics of the eight remaining
   runs; `bench --compare` rendered the same scene through `opurom-render` and `opurom-gpu` and
@@ -1045,7 +1083,8 @@ lib/service.mjs       generated-service env, offline-first build, spawn, health 
 lib/serve.mjs         serve command
 lib/dev.mjs           static server, SSE, sync hub, fs.watch, client injection, backend restart, multi-target preview
 lib/bench.mjs         measured timings + artifact sizes + bench --full table + JSON samples
-lib/async_runtime.mjs measured profile + JSON schema + read-only layer/a11y inspect
+lib/async_runtime.mjs measured profile + injected clock + common JSON schema + inspect
+lib/frame_profile.mjs frame timing stats, fpsX10, sparkline, JSON and Markdown reports
 lib/inspect_tree.mjs  deterministic widget tree: bounds, conditions, --select/--layers/--json
 lib/minify.mjs        tokenizer, safe JS minifier, asset removal, measured size report
 lib/profile.mjs       profile --repeat stats + environment, bench --compare byte equality + JSON
@@ -1063,8 +1102,9 @@ test/sync.test.mjs    real loopback WebSocket sync tests (10)
 test/optimize.test.mjs  reachability, source maps, composition and size tests (8)
 test/examples.test.mjs  example registry and runner tests (12)
 test/bench-json.test.mjs  real-process JSON report tests (8)
+test/frame_profile.test.mjs  injected samples, schema, validation and real renderer (11)
 test/doctor.test.mjs   toolchain report tests (3)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (146 tests)
+test/*.test.mjs       node:test unit suite (172 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```
