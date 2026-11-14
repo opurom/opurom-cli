@@ -6,9 +6,9 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { measureRenderRuns } from '../lib/async_runtime.mjs';
 import {
-  FRAME_PROFILE_FIELDS, MAX_FRAMES, SPARKLINE_BUCKETS,
+  FRAME_PROFILE_FIELDS, FRAME_PROFILE_TIER_FIELDS, MAX_FRAMES, SPARKLINE_BUCKETS,
   frameProfileJson, frameProfileMarkdown, frameProfileRecord, frameSparkline,
-  parseFrameCount, profileFrames,
+  parseDegradeHz, parseFrameCount, profileFrames, summarizeTiers,
 } from '../lib/frame_profile.mjs';
 import { discoverBinary, tmpDir, workspaceRoot } from '../lib/paths.mjs';
 
@@ -313,6 +313,158 @@ test('real renderer samples are positive and finite', (t) => {
     assert.equal(record.sparkline.length, 3);
     assert.ok([...record.sparkline].every((char) => LEVELS.includes(char)));
     t.diagnostic(frameProfileJson(record));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// A stub renderer that mirrors opurom-render's auto-degrade state machine from
+// its argv, so the CLI wiring is exercised without the real binary.
+const DEGRADE_RENDERER_STUB = `#!/usr/bin/env node
+const argv = process.argv.slice(2);
+const at = (name) => { const i = argv.indexOf(name); return i === -1 ? null : argv[i + 1]; };
+let tier = 0;
+const rate = at('--auto-degrade');
+if (rate) {
+  const target = rate === '120' ? 8 : 16;
+  const samples = at('--frame-ms').split(',').map(Number);
+  const n = Number(at('--frame-samples') ?? 20);
+  const counts = [0, 0, 0];
+  let good = 0;
+  for (let f = 1; f <= n; f += 1) {
+    if (f % 20 === 0) {
+      const w = [];
+      for (let k = f - 20; k < f; k += 1) w.push(samples[k % samples.length]);
+      w.sort((a, b) => a - b);
+      const p95 = w[Math.ceil(95 * w.length / 100) - 1];
+      if (p95 > target) { tier = Math.min(tier + 1, 2); good = 0; }
+      else if (p95 < target * 3 / 4 && tier !== 0) { good += 1; if (good >= 3) { tier = Math.max(tier - 1, 0); good = 0; } }
+      else good = 0;
+    }
+    counts[tier] += 1;
+  }
+  process.stdout.write('quality=' + ['Full', 'Reduced', 'Minimal'][tier] + '\\n');
+}
+const out = argv[3];
+require('fs').writeFileSync(out, 'P6\\n1 1\\n255\\n');
+process.stdout.write('digest=0123456789abcdef\\ndirty=1\\n');
+`;
+
+test('parseDegradeHz accepts only 60 or 120 and treats absence as off', () => {
+  assert.equal(parseDegradeHz(undefined), null);
+  assert.equal(parseDegradeHz(null), null);
+  assert.equal(parseDegradeHz('60'), 60);
+  assert.equal(parseDegradeHz('120'), 120);
+  for (const bad of ['90', '', '60.5', true, 60]) {
+    assert.throws(() => parseDegradeHz(bad), /invalid --degrade: .* \(expected 60 or 120\)/);
+  }
+});
+
+test('summarizeTiers mirrors the renderer policy constant-for-constant', () => {
+  const repeat = (value, n) => Array(n).fill(value);
+  // Steady fast samples never drop a tier and stay Full.
+  assert.deepEqual(summarizeTiers(repeat(5, 60), 60), {
+    tiers: [{ tier: 'Full', frames: 60 }], degraded: false, p50: 5, p95: 5,
+  });
+  // Exactly at the target (16 ms) is not over, so Full is kept.
+  assert.equal(summarizeTiers(repeat(16, 40), 60).degraded, false);
+  // Sustained slow: the first evaluated window (frames 1..19 still Full, the
+  // drop lands on frame 20) degrades one tier, a second window one more.
+  assert.deepEqual(summarizeTiers(repeat(30, 60), 60), {
+    tiers: [
+      { tier: 'Full', frames: 19 },
+      { tier: 'Reduced', frames: 20 },
+      { tier: 'Minimal', frames: 21 },
+    ],
+    degraded: true, p50: 30, p95: 30,
+  });
+  // At 120 fps the target is 8 ms, so 10 ms is over budget and degrades.
+  assert.equal(summarizeTiers(repeat(10, 20), 120).degraded, true);
+  assert.equal(summarizeTiers(repeat(8, 20), 120).degraded, false);
+});
+
+test('summarizeTiers needs three consecutive good windows to promote', () => {
+  const slow = Array(20).fill(30); // one bad window -> Reduced at frame 20
+  // 20 slow then 40 fast = only two good windows: stays Reduced.
+  const twoWindows = summarizeTiers([...slow, ...Array(40).fill(5)], 60);
+  assert.equal(twoWindows.degraded, true);
+  assert.deepEqual(twoWindows.tiers.at(-1), { tier: 'Reduced', frames: 41 });
+  // 20 slow then 60 fast = three good windows: promotes back to Full at frame 80.
+  const recovered = summarizeTiers([...slow, ...Array(60).fill(5)], 60);
+  assert.equal(recovered.degraded, false);
+  assert.deepEqual(recovered.tiers, [
+    { tier: 'Full', frames: 20 },
+    { tier: 'Reduced', frames: 60 },
+  ]);
+});
+
+test('frame record adds the tiers field only with --degrade', () => {
+  const plain = frameProfileRecord({ src: '/a/main.opu', requestedFrames: 4, samples: SAMPLES, status: 'PASS' });
+  assert.deepEqual(Object.keys(plain), [...FRAME_PROFILE_FIELDS]);
+  assert.equal('tiers' in plain, false);
+
+  const degraded = frameProfileRecord({
+    src: '/a/main.opu', requestedFrames: 4, samples: SAMPLES, status: 'PASS', degradeHz: 60,
+  });
+  assert.deepEqual(Object.keys(degraded), [...FRAME_PROFILE_TIER_FIELDS]);
+  assert.deepEqual(degraded.tiers, [{ tier: 'Full', frames: 4 }]);
+  assert.match(frameProfileJson(degraded), /"reason":null,"tiers":\[\{"tier":"Full","frames":4\}\]\}$/);
+  assert.match(frameProfileMarkdown(degraded), /\| tiers \| Full:4 \|/);
+});
+
+test('--degrade feeds the SAME measured samples through --frame-ms and reports the stub tier', () => {
+  const base = tmpDir('frame-profile-degrade-stub-');
+  try {
+    writeStub(base, 'opuromc', COMPILER_STUB);
+    writeStub(base, 'opurom-render', DEGRADE_RENDERER_STUB);
+    const src = writeSource(base);
+
+    const slowLines = [];
+    withCleanPath(base, () => profileFrames({
+      src, frames: 60, degrade: '60', root: base, envPath: base, keep: false,
+      samples: Array(60).fill(30), log: (line) => slowLines.push(String(line)),
+    }));
+    const slow = JSON.parse(slowLines.join('\n'));
+    assert.deepEqual(slow.tiers.map((t) => t.tier), ['Full', 'Reduced', 'Minimal']);
+    assert.equal(slow.tiers.reduce((sum, t) => sum + t.frames, 0), 60);
+
+    const fastLines = [];
+    withCleanPath(base, () => profileFrames({
+      src, frames: 60, degrade: '60', root: base, envPath: base,
+      samples: Array(60).fill(5), log: (line) => fastLines.push(String(line)),
+    }));
+    assert.deepEqual(JSON.parse(fastLines.join('\n')).tiers, [{ tier: 'Full', frames: 60 }]);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('a real renderer run degrades a slow --frame-ms list below a fast one', (t) => {
+  const renderBin = discoverBinary(['opurom-render', 'opurom_render'], { root: workspaceRoot() });
+  if (!renderBin) return t.skip('opurom-render binary unavailable');
+  const base = tmpDir('frame-profile-real-degrade-');
+  try {
+    const irFile = path.join(base, 'app.opuir.json');
+    fs.copyFileSync(new URL('./fixtures/widget-inspect.opuir.json', import.meta.url), irFile);
+    const frame = path.join(base, 'frame.ppm');
+    const digestOf = (args) => {
+      const { status, stdout, stderr } = spawnSync(renderBin, [irFile, '800', '600', frame, ...args], { encoding: 'utf8' });
+      assert.equal(status, 0, stderr);
+      const match = /^digest=([0-9a-f]+)$/m.exec(stdout);
+      assert.ok(match, stdout);
+      return match[1];
+    };
+    // Fast samples stay on budget; slow samples degrade the Full-only `glass`
+    // Card, so the two PPM digests differ. `--frame-ms 5` differs from the
+    // measured slow list, proving a real renderer responded to the tier.
+    const fast = digestOf(['--auto-degrade', '60', '--frame-ms', '5', '--frame-samples', '60']);
+    const slow = digestOf(['--auto-degrade', '60', '--frame-ms', '30', '--frame-samples', '60']);
+    assert.notEqual(slow, fast);
+    const fastTier = summarizeTiers(Array(60).fill(5), 60).tiers.at(-1).tier;
+    const slowTier = summarizeTiers(Array(60).fill(30), 60).tiers.at(-1).tier;
+    assert.equal(fastTier, 'Full');
+    assert.equal(slowTier, 'Minimal');
+    t.diagnostic(`fast=${fast} (${fastTier}) slow=${slow} (${slowTier})`);
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
