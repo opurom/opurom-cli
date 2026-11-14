@@ -6,10 +6,14 @@ import { tmpDir } from '../lib/paths.mjs';
 import { dev } from '../lib/dev.mjs';
 
 // Self-contained: a stub opuromc on PATH means no sibling Rust repo is needed.
+// Each compile bumps a counter beside the script and embeds it in the IR tree,
+// so a source change produces a genuinely different IR (leaf-only: hot reload).
 const STUB = `#!/bin/sh
 set -e
 case "$1" in
-  compile) printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[],"tree":{},"theme":{}}' > "$4" ;;
+  compile)
+    n=0; [ -f "$0.count" ] && n=$(cat "$0.count"); n=$((n + 1)); echo "$n" > "$0.count"
+    printf '%s\\n' "{\\"ir\\":\\"0.1\\",\\"app\\":\\"Counter\\",\\"state\\":[],\\"tree\\":{\\"id\\":$n},\\"theme\\":{}}" > "$4" ;;
   target) mkdir -p "$6"; cp "$2" "$6/ir.json";
     printf '%s\\n' '<html><head><title>x</title></head><body><script src="app.js"></script></body></html>' > "$6/index.html";
     printf '%s\\n' 'const state = {"count":7};' > "$6/app.js" ;;
@@ -80,11 +84,14 @@ test('dev server serves injected html, health, and an SSE reload on source chang
 // Same stub compiler as above, plus one log line per invocation so the test can
 // count compiles and lowerings.
 function stubWithCallLog(callsFile) {
+  const countFile = `${callsFile}.count`;
   return `#!/bin/sh
 set -e
 printf '%s\\n' "$1" >> '${callsFile}'
 case "$1" in
-  compile) printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[],"tree":{},"theme":{}}' > "$4" ;;
+  compile)
+    n=0; [ -f '${countFile}' ] && n=$(cat '${countFile}'); n=$((n + 1)); echo "$n" > '${countFile}'
+    printf '%s\\n' "{\\"ir\\":\\"0.1\\",\\"app\\":\\"Counter\\",\\"state\\":[],\\"tree\\":{\\"id\\":$n},\\"theme\\":{}}" > "$4" ;;
   target) mkdir -p "$6"; cp "$2" "$6/ir.json";
     printf '%s\\n' '<html><head><title>multi</title></head><body><script src="app.js"></script></body></html>' > "$6/index.html";
     printf '%s\\n' 'const state = {"count":7};' > "$6/app.js" ;;
@@ -151,6 +158,68 @@ test('dev --targets lowers two targets from one IR per rebuild and serves a list
     names = callNames();
     assert.equal(names.filter((n) => n === 'compile').length, 2);
     assert.equal(names.filter((n) => n === 'target').length, 4);
+  } finally {
+    if (handle) await handle.close();
+    process.env.PATH = oldPath;
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+// Hot/full classification wired into the watch loop: a leaf-only edit keeps
+// state (hot) and a state-schema edit forces a full reload, both readable from
+// /health lastReload without any browser.
+test('dev watch loop classifies hot vs full reloads from the IR', { timeout: 20000 }, async () => {
+  const base = tmpDir('dev-hot-reload-test-');
+  const bin = path.join(base, 'bin');
+  const src = path.join(base, 'main.opu');
+  const modeFile = path.join(base, 'mode');
+  fs.mkdirSync(bin);
+  const STUB_MODE = `#!/bin/sh
+mode=else
+if [ -f '${modeFile}' ]; then mode=$(cat '${modeFile}'); fi
+case "$1" in
+  compile)
+    if [ "$mode" = "schema" ]; then
+      printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[{"name":"count","type":"int","init":0},{"name":"x","type":"int","init":0}],"tree":{"id":1,"kind":"Text","props":{"value":"b"},"children":[],"events":{}},"theme":{}}' > "$4"
+    elif [ "$mode" = "leaf" ]; then
+      printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[{"name":"count","type":"int","init":0}],"tree":{"id":2,"kind":"Text","props":{"value":"a"},"children":[],"events":{}},"theme":{}}' > "$4"
+    else
+      printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[{"name":"count","type":"int","init":0}],"tree":{"id":1,"kind":"Text","props":{"value":"a"},"children":[],"events":{}},"theme":{}}' > "$4"
+    fi ;;
+  target) mkdir -p "$6"; cp "$2" "$6/ir.json";
+    printf '%s\\n' '<html><head></head><body><script src="app.js"></script></body></html>' > "$6/index.html"; ;;
+  *) exit 2 ;;
+esac
+`;
+  fs.writeFileSync(path.join(bin, 'opuromc'), STUB_MODE, { mode: 0o755 });
+  fs.writeFileSync(src, 'app Counter { state count = 0 }\n');
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath ?? ''}`;
+  let handle;
+  const waitKind = async (baseUrl, kind) => {
+    const deadline = Date.now() + 8000;
+    while (Date.now() < deadline) {
+      const health = await (await fetch(`${baseUrl}/health`)).json();
+      if (health.lastReload && health.lastReload.kind === kind) return health;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`no ${kind} reload within 8s`);
+  };
+  try {
+    handle = await dev({ src, port: 0, root: base, signals: false, backend: false, log: () => {} });
+    const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
+    const first = await (await fetch(`${baseUrl}/health`)).json();
+    assert.equal(first.rebuilds, 1);
+
+    fs.writeFileSync(modeFile, 'leaf');
+    fs.appendFileSync(src, '// leaf\n');
+    const hot = await waitKind(baseUrl, 'hot');
+    assert.equal(hot.lastReload.reason, 'tree-changed');
+
+    fs.writeFileSync(modeFile, 'schema');
+    fs.appendFileSync(src, '// schema\n');
+    const full = await waitKind(baseUrl, 'full');
+    assert.equal(full.lastReload.reason, 'state-schema-changed');
   } finally {
     if (handle) await handle.close();
     process.env.PATH = oldPath;

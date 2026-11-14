@@ -11,7 +11,9 @@ import { dev, devClientScript } from '../lib/dev.mjs';
 const STUB = `#!/bin/sh
 set -e
 case "$1" in
-  compile) printf '%s\\n' '{"ir":"0.1","app":"Counter","state":[],"tree":{},"theme":{}}' > "$4" ;;
+  compile)
+    n=0; [ -f "$0.count" ] && n=$(cat "$0.count"); n=$((n + 1)); echo "$n" > "$0.count"
+    printf '%s\\n' "{\\"ir\\":\\"0.1\\",\\"app\\":\\"Counter\\",\\"state\\":[],\\"tree\\":{\\"id\\":$n},\\"theme\\":{}}" > "$4" ;;
   target)
     name="$4"; out="$6"; mkdir -p "$out"; cp "$2" "$out/ir.json"
     case "$name" in
