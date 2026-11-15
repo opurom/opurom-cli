@@ -2,17 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build, planBuild } from '../lib/build.mjs';
 import { digestOf, dirtyOf, platformRows } from '../lib/e2e.mjs';
-import { TARGETS, targetsFromBuiltins, validateTarget } from '../lib/targets.mjs';
+import { TARGETS, VALID_TARGETS, targetsFromBuiltins, validateTarget } from '../lib/targets.mjs';
 
-test('targetsFromBuiltins returns the 8 built-in emitters', () => {
+test('targetsFromBuiltins returns every built-in emitter', () => {
   const names = targetsFromBuiltins();
-  assert.equal(names.length, 8);
-  assert.deepEqual(names, [...TARGETS]);
+  assert.equal(names.length, VALID_TARGETS.length);
+  assert.deepEqual(names, [...VALID_TARGETS]);
   for (const name of names) assert.doesNotThrow(() => validateTarget(name));
 });
 
 test('targetsFromBuiltins ignores any path argument and still returns the built-in list', () => {
-  assert.deepEqual(targetsFromBuiltins('/definitely/not/here/anything.md'), [...TARGETS]);
+  assert.deepEqual(targetsFromBuiltins('/definitely/not/here/anything.md'), [...VALID_TARGETS]);
 });
 
 test('planBuild compiles, lowers, and adds cargo only for native', () => {
@@ -27,7 +27,7 @@ test('planBuild compiles, lowers, and adds cargo only for native', () => {
 });
 
 test('build rejects bad target and missing source before invoking any tool', () => {
-  assert.throws(() => build({ src: '/definitely/missing.opu', target: 'wasm', out: 'tmp/x' }), /unknown target/);
+  assert.throws(() => build({ src: '/definitely/missing.opu', target: 'wasm32', out: 'tmp/x' }), /unknown target/);
   assert.throws(() => build({ src: '/definitely/missing.opu', target: 'web', out: 'tmp/x' }), /source not found/);
 });
 

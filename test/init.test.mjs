@@ -41,7 +41,7 @@ test('init scaffolds a branded project and refuses to overwrite non-empty dirs',
     ]);
     const config = JSON.parse(fs.readFileSync(path.join(project, 'opurom.json'), 'utf8'));
     assert.equal(config.name, 'demo');
-    assert.equal(config.targets.length, 8);
+    assert.equal(config.targets.length, 10);
     assert.match(fs.readFileSync(path.join(project, 'src', 'main.opu'), 'utf8'), /app Counter/);
 
     const png = fs.readFileSync(path.join(project, 'logo.png'));

@@ -59,7 +59,7 @@ test('parseDevTargets defaults to web-dom, validates, dedupes and preserves orde
   assert.deepEqual(parseDevTargets('web,,wechat'), ['web', 'wechat']);
   assert.deepEqual(parseDevTargets(['web', 'wechat']), ['web', 'wechat']);
   assert.throws(() => parseDevTargets('web,full'), /invalid --targets: full/);
-  assert.throws(() => parseDevTargets('wasm'), /invalid --targets: wasm/);
+  assert.deepEqual(parseDevTargets('wasm'), ['wasm']);
 });
 
 test('parseDevTargets accepts all nine dev targets including web-dom', () => {

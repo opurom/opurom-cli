@@ -167,7 +167,7 @@ test('suite runs are bounded to 1..1000', () => {
 });
 
 test('injected clock and sample source produce hand-computed integer statistics', () => {
-  assert.equal(BENCH_SUITE_TARGETS.length, 10);
+  assert.equal(BENCH_SUITE_TARGETS.length, 11);
   assert.deepEqual(measureRuns({ runs: RUNS, now: bigintClock(COMPILE_SAMPLES), run: () => {} }), COMPILE_SAMPLES);
   assert.deepEqual(summarize(COMPILE_SAMPLES), {
     p50: 20,
@@ -272,7 +272,7 @@ test('suite JSON has deterministic key order, raw samples and no wall clock', ()
     assert.equal(record.compile.p95, 40);
     assert.equal(record.compile.totalMs, COMPILE_SAMPLES.reduce((sum, ms) => sum + ms, 0));
     assert.equal(record.artifacts[0].bytes, 1);
-    assert.equal(record.artifacts.at(-1).bytes, 10);
+    assert.equal(record.artifacts.at(-1).bytes, BENCH_SUITE_TARGETS.length);
 
     const shuffled = Object.fromEntries(Object.entries({
       ...record,
@@ -398,7 +398,7 @@ test('an unavailable emitter target is PARTIAL with null bytes, never a fake PAS
     assert.equal(webDom.files, null);
     assert.equal(webDom.bytes, null);
     assert.match(webDom.reason, /responsive DOM emitter not found/);
-    assert.equal(record.artifacts.filter((entry) => entry.status === 'PASS').length, 9);
+    assert.equal(record.artifacts.filter((entry) => entry.status === 'PASS').length, BENCH_SUITE_TARGETS.length - 1);
     for (const artifact of record.artifacts.filter((entry) => entry.status === 'PASS')) {
       assert.ok(Number.isSafeInteger(artifact.bytes) && artifact.bytes > 0);
     }
@@ -429,7 +429,7 @@ test('CLI --suite --json and --markdown emit real-process reports with fixed sch
     assert.equal(json.competitors, 'not measured');
     assert.match(json.reason, /competitor binaries are not available on this host/);
     assertMeasured(json, 3);
-    assert.equal(json.artifacts.length, 10);
+    assert.equal(json.artifacts.length, BENCH_SUITE_TARGETS.length);
     for (const artifact of json.artifacts) {
       assert.deepEqual(Object.keys(artifact), [...ARTIFACT_FIELDS]);
       assert.equal(artifact.status, 'PASS');
@@ -452,7 +452,7 @@ test('CLI --suite --json and --markdown emit real-process reports with fixed sch
       .map((line) => line.slice(2, line.indexOf(' |')));
     assert.deepEqual(fields, expectedFields);
     assert.match(markdownResult.stdout, /\| competitors \| not measured \|/);
-    assert.equal(lines.filter((line) => BENCH_SUITE_TARGETS.some((target) => line.startsWith(`| ${target} |`))).length, 10);
+    assert.equal(lines.filter((line) => BENCH_SUITE_TARGETS.some((target) => line.startsWith(`| ${target} |`))).length, BENCH_SUITE_TARGETS.length);
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

@@ -44,8 +44,8 @@ test('parsePort validates range and default', () => {
   assert.throws(() => parsePort('70000'), /invalid --port/);
 });
 
-test('validateTarget accepts only the 8 IR emitters', () => {
-  assert.equal(TARGETS.length, 8);
+test('validateTarget accepts every IR emitter', () => {
+  assert.equal(TARGETS.length, 10);
   for (const name of TARGETS) assert.equal(validateTarget(name), name);
-  assert.throws(() => validateTarget('wasm'), /unknown target/);
+  assert.throws(() => validateTarget('wasm32'), /unknown target/);
 });
