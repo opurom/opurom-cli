@@ -248,7 +248,7 @@ async function main(argv) {
       return inspectTree({ ir, select, layers: flagEnabled(flags, 'layers'), json: flagEnabled(flags, 'json') });
     }
     case 'examples':
-      examplesList();
+      await examplesList();
       return 0;
     case 'test':
       if (flagEnabled(flags, 'examples')) {
