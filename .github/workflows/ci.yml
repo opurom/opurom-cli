@@ -54,7 +54,11 @@ jobs:
               git clone --depth 1 "https://github.com/opurom/opurom-lang.git" opurom-lang
               ;;
             opurom-platform|opurom-cli)
-              git clone --depth 1 "https://github.com/opurom/opurom-examples.git" opurom-examples
+              # The interaction/widget tests drive the real compiler and
+              # renderer from sibling checkouts.
+              for repo in opurom-examples opurom-core opurom-lang opurom-render; do
+                git clone --depth 1 "https://github.com/opurom/${repo}.git" "$repo"
+              done
               ;;
             opurom-lang)
               for repo in opurom-render opurom-examples; do
