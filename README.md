@@ -678,6 +678,55 @@ the bound nodes from the live state, and writes edited values back to the snapsh
 reloads the page with its current state. `/health` lists the targets receiving the snapshot in
 `stateRestore`.
 
+## Dev hot-reload coverage matrix
+
+What a source save does per target under `dev`, measured against the shipped
+loop (not aspirations). `full` = the `decideReload` shell/state-schema branch,
+`hot` = the tree-only branch.
+
+| target | dev preview | on save | state preserved |
+|--------|-------------|---------|-----------------|
+| `web` | served canvas page (`app.js`) | SSE `reload` frame | yes — the app.js patch merges the `sessionStorage` snapshot (hot) |
+| `web-dom` | served responsive page | SSE `reload` frame | yes — the page state runtime restores the snapshot; the dev server publishes the router store to the observability feed |
+| `native` | desktop preview process driven over its stdio state machine | rebuild + process swap | hot: yes — the recorded event log is replayed into the fresh binary and the result is verified against the previous `state` report (`preserved` in `/health`); full: reset |
+| `wasm` | served host page | SSE `reload` frame | no — state lives in the wasm instance memory, no snapshot channel |
+| `wechat`, `alipay`, `qq`, `douyin`, `baidu`, `kuaishou` | emitted files served under `/<target>/` | SSE `reload` frame | no — no state snapshot channel; a real preview needs the vendor simulator |
+| `harmony` | emitted ArkTS project files served | SSE `reload` frame | no — no runnable preview without the vendor toolchain |
+| `full` | not a dev target | rejected before the server starts | — |
+
+### Native desktop preview
+
+```sh
+node bin/opurom.mjs dev --src app.opu --targets native
+curl -s -X POST http://127.0.0.1:5178/__opurom/native \
+  -H 'content-type: application/json' -d '{"op":"tap","id":4}'   # or {"op":"input","id":5,"text":"hi"}
+curl -s http://127.0.0.1:5178/__opurom/state                      # the preview state, also on the SSE `state` stream
+node bin/opurom.mjs inspect --dev http://127.0.0.1:5178
+```
+
+The emitted native binary is a stdio state machine (`tap`/`input`/`state`/`quit`
+on stdin, a `state k=v` line on stdout after every command). The dev loop runs
+one live process per build, forwards interactions from `POST /__opurom/native`
+(404 outside `--targets native`, 400 on an invalid op), records the event log
+and reports the live state through the same feed the browser reporter uses.
+
+A hot reload rebuilds the binary, restarts the process and replays the event
+log, so the state survives the swap whenever the event handlers are unchanged;
+`/health` reports `native.lastReload.preserved` from comparing the pre-reload
+and post-replay `state` reports (`null` = unverifiable). A full reload drops the
+log and starts fresh. A failed build keeps the preview on the previous binary
+with its state replayed instead of dropping the desktop loop.
+
+In-process tree swap is **not possible today**: the emitted binary embeds the IR
+as a compile-time constant and compiles the event handlers into code, so a
+running process cannot see a new tree. Unblocking it needs the native emitter to
+read the IR from a file (env or flag, embedded constant as fallback) and to
+accept a `reload` command on stdin — the renderer already parses IR at runtime,
+so with those two emitter changes a hot reload becomes a data swap and the
+process survives. Native preview requires single-target dev (`--targets native`);
+multi-target dev lowers native sources without a cargo build, so the preview is
+reported disabled in `/health`.
+
 ## `bench`: measured numbers only
 
 ```sh
