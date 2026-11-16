@@ -18,6 +18,7 @@ import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
 import { examplesList, runExampleTests } from '../lib/examples.mjs';
+import { discoverScripts, runWidgetTests } from '../lib/widget_test.mjs';
 
 const USAGE = `opurom — Opurom toolchain CLI (zero npm dependencies)
 
@@ -71,6 +72,8 @@ Commands:
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
                                   run registered example tests ctest-style
+  test --widget <file|dir> [--verbose]
+                                  run interaction-test scripts (.wtest.json)
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
 
@@ -236,6 +239,14 @@ async function main(argv) {
           jobs: flags.jobs,
           verbose: flagEnabled(flags, 'verbose'),
         });
+        return exitCode;
+      }
+      if (flags.widget !== undefined) {
+        if (flags.widget === true) throw new Error('--widget requires a script file or directory');
+        const target = path.resolve(flags.widget);
+        const files = target.endsWith('.wtest.json') ? [target] : discoverScripts(target);
+        if (files.length === 0) throw new Error(`no .wtest.json scripts found under ${target}`);
+        const { exitCode } = runWidgetTests(files, { verbose: flagEnabled(flags, 'verbose') });
         return exitCode;
       }
       console.log('Opurom end-to-end tests');
