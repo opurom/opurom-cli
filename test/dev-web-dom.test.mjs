@@ -193,7 +193,9 @@ test('dev --targets web,wechat still lowers two emitters from one IR', { timeout
   }
 });
 
-test('web-dom hot reload writes the edited state to the session snapshot before reloading', () => {
+// Minimal page environment for the injected dev client: listeners, the report
+// interval and fetch are recorded instead of running.
+function runDevClient() {
   const body = devClientScript().replace(/^<script>/, '').replace(/<\/script>$/, '');
   const writes = [];
   const store = new Map();
@@ -208,8 +210,32 @@ test('web-dom hot reload writes the edited state to the session snapshot before 
   const EventSource = function () { return events; };
   const reloads = [];
   const window = {};
-  const run = new Function('window', 'sessionStorage', 'EventSource', 'location', `${body};`);
-  run(window, storage, EventSource, { reload: () => reloads.push('reload') });
+  const docListeners = {};
+  const document = {
+    addEventListener(type, handler, capture) {
+      (docListeners[type] ??= []).push({ handler, capture });
+    },
+  };
+  const timers = [];
+  const fetches = [];
+  const fetchImpl = (url, options) => {
+    fetches.push({ url, options });
+    return Promise.resolve({ ok: true });
+  };
+  const run = new Function(
+    'window', 'sessionStorage', 'EventSource', 'location', 'document', 'setInterval', 'fetch',
+    `${body};`,
+  );
+  run(
+    window, storage, EventSource, { reload: () => reloads.push('reload') }, document,
+    (handler, ms) => { timers.push({ handler, ms }); return timers.length; },
+    fetchImpl,
+  );
+  return { window, writes, listeners, reloads, docListeners, timers, fetches };
+}
+
+test('web-dom hot reload writes the edited state to the session snapshot before reloading', () => {
+  const { window, writes, listeners, reloads } = runDevClient();
 
   // The responsive DOM page's state runtime exposes the live, edited state.
   window.opurom = { state: { count: 5 } };
@@ -217,4 +243,30 @@ test('web-dom hot reload writes the edited state to the session snapshot before 
 
   assert.equal(reloads.length, 1, 'a source save reloads the page');
   assert.deepEqual(JSON.parse(writes.at(-1)), { count: 5 }, 'the edited state is written before the reload');
+});
+
+test('dev client captures interactions and posts state + events to the dev server', async () => {
+  const { window, docListeners, timers, fetches } = runDevClient();
+
+  assert.deepEqual(Object.keys(docListeners).sort(), ['change', 'click', 'input', 'keydown'],
+    'the dev client must capture every interaction type');
+  assert.ok(Object.values(docListeners).flat().every((entry) => entry.capture === true),
+    'interaction capture must run before the page handlers');
+  assert.deepEqual(timers.map((timer) => timer.ms), [500], 'state reports are polled every 500ms');
+
+  window.opurom = { state: { count: 5 } };
+  docListeners.click[0].handler({ target: { closest: () => ({ getAttribute: () => '3' }) } });
+  timers[0].handler();
+
+  assert.equal(fetches.length, 1, 'a changed report is posted once');
+  assert.equal(fetches[0].url, '/__opurom/state');
+  assert.equal(fetches[0].options.method, 'POST');
+  assert.equal(fetches[0].options.keepalive, true, 'the report must survive page reloads');
+  const payload = JSON.parse(fetches[0].options.body);
+  assert.deepEqual(payload.state, { count: 5 });
+  assert.deepEqual(payload.events, [{ type: 'click', nodeId: 3 }]);
+
+  await Promise.resolve();
+  timers[0].handler();
+  assert.equal(fetches.length, 1, 'an unchanged report is not resent');
 });

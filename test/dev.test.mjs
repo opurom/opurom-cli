@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { devClientScript, injectDevClient, mimeType, parseDevTargets, patchAppState, resolveStatic, sseFrame, targetsIndexHtml } from '../lib/dev.mjs';
+import { devClientScript, exposeRouterState, injectDevClient, mimeType, parseDevTargets, patchAppState, resolveStatic, sseFrame, targetsIndexHtml } from '../lib/dev.mjs';
 
 test('SSE client uses the state key, reload event and sessionStorage', () => {
   const script = devClientScript();
@@ -31,6 +31,15 @@ test('patchAppState merges the snapshot into generated state and exposes it', ()
   assert.match(patched, /window\.opurom\.state = typeof state/);
   assert.equal(patchAppState(patched), patched);
   assert.match(patchAppState('render();\n'), /__opurom_state_exposed__/);
+});
+
+test('exposeRouterState publishes the router closure state exactly once', () => {
+  const html = '<script>(function () {\n  var state = {"count":0};\n  var stack = ["home"];\n})();</script>';
+  const patched = exposeRouterState(html);
+  assert.ok(patched.indexOf('window.opurom.state = state;') < patched.indexOf('var stack'),
+    'the state object must be published before any later statement');
+  assert.equal(exposeRouterState(patched), patched);
+  assert.equal(exposeRouterState('<p>static page</p>'), '<p>static page</p>');
 });
 
 test('resolveStatic rejects traversal and maps / to index.html', () => {

@@ -14,6 +14,7 @@ import { benchSuite } from '../lib/bench_suite.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
+import { inspectDevState } from '../lib/inspect_dev.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
@@ -68,6 +69,9 @@ Commands:
   inspect <ir.json> [--select <id>] [--layers] [--json]
                                   widget tree (ids, kinds, bounds, visibility);
                                   --select returns one node's ancestor path+subtree
+  inspect --dev [<url>] [--json]
+                                  live state snapshot + recent events from a
+                                  running "opurom dev" server (default :5178)
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
@@ -223,7 +227,11 @@ async function main(argv) {
     }
     case 'inspect': {
       const ir = positionals[1];
-      if (!ir) throw new Error('usage: inspect <ir.json> [--select <id>] [--layers] [--json]');
+      if (flags.dev !== undefined) {
+        if (ir) throw new Error('usage: inspect accepts <ir.json> or --dev <url>, not both');
+        return await inspectDevState({ url: flags.dev, json: flagEnabled(flags, 'json') });
+      }
+      if (!ir) throw new Error('usage: inspect <ir.json> [--select <id>] [--layers] [--json] | inspect --dev [<url>] [--json]');
       const select = flags.select === undefined ? undefined
         : (flags.select === true ? '' : String(flags.select));
       return inspectTree({ ir, select, layers: flagEnabled(flags, 'layers'), json: flagEnabled(flags, 'json') });
