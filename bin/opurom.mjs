@@ -48,6 +48,8 @@ Commands:
   dev --src <src.opu> [--port N] [--sync] [--targets t1,t2]
                                   serve web-dom page with SSE hot reload (+ backend restart);
                                   --targets accepts nine dev targets; 2+ list them at /
+  dev --src <src.opu> --android [--device <serial>]
+                                  push state-preserving hot reload to an Android device
   dev --sync [--clients N] [--port N]
                                   verify N loopback WebSocket clients against a running sync hub
   bench --src <src.opu> [--out <dir>] [--full] [--json]
@@ -168,7 +170,10 @@ async function main(argv) {
         return (await verifySync({ port, clients: flags.clients })).code;
       }
       const { src } = requireFlags(flags, ['src']);
-      await dev({ src, port, sync, targets: flags.targets });
+      await dev({
+        src, port, sync, targets: flags.targets,
+        android: flagEnabled(flags, 'android') ? { serial: typeof flags.device === 'string' ? flags.device : undefined } : null,
+      });
       return 0; // the HTTP server keeps the process alive
     }
     case 'bench': {
