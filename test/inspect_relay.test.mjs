@@ -68,7 +68,7 @@ test('the relay stamps seq server-side, caps the ring and reports availability',
   assert.equal(relay.pullFrames().frames.length, 200, 'the ring is capped at 200');
   assert.equal(relay.pullFrames({ since: 240 }).frames[0].seq, 240, 'since filters on the server seq');
   assert.deepEqual(relay.pullNetwork(), {
-    ...AVAILABILITY.network.absent, version: 0, network: [],
+    ...AVAILABILITY.network.absent, version: 0, records: [],
   });
   assert.equal(relay.pullNetwork().availability, 'absent', 'no proxy, no fabricated records');
 });
@@ -84,7 +84,7 @@ test('memory records one entry per dispatch with honest nulls', () => {
   assert.equal(view.memory.images, null);
   assert.deepEqual(view.memory.history, [{ version: 0, totalBytes: view.memory.stateBytes }]);
   for (let i = 0; i < 60; i += 1) relay.addMemory({ state: { i } });
-  assert.equal(relay.pullMemory().history.length, 50, 'the history ring is capped at 50');
+  assert.equal(relay.pullMemory().memory.history.length, 50, 'the history ring lives inside the record, capped at 50');
 });
 
 test('reset bumps the version and clears the rings', () => {
@@ -202,7 +202,7 @@ test('the dev server relays frames and memory over SSE and the pull endpoints', 
     assert.equal(memory.memory.cache, null, 'absent mirrors stay null');
     const network = await (await fetch(`${baseUrl}/api/inspect/network`)).json();
     assert.equal(network.availability, 'absent');
-    assert.deepEqual(network.network, []);
+    assert.deepEqual(network.records, [], 'the bundle consumes the records key');
 
     const bundle = await fetch(`${baseUrl}/inspector`);
     assert.equal(bundle.status, 200, 'the CLI hosts the opurom-web bundle at /inspector');
@@ -250,11 +250,19 @@ test('a reload resets the relay rings and bumps the version', { timeout: 20000 }
 const KERNEL_FRAMES = { frames: [{ frameMs: 16, startMs: 0, tier: 'full' }, { frameMs: 30, startMs: 16, tier: 'reduced' }], report: { p50Ms: 30, p95Ms: 30, fpsX10: 400, tier: 'reduced' }, version: 0 };
 const KERNEL_MEMORY = { cache: { budget: 8, usedBytes: 3, entries: 1 }, stateBytes: 12, layersBytes: 4, images: { entries: 1, bytes: 9 }, history: [{ version: 0, totalBytes: 16 }] };
 const KERNEL_STUB = `#!/bin/sh
+recorded=0
 while IFS= read -r line || [ -n "$line" ]; do
   set -- $line
   case "$1" in
     frames) printf '%s\\n' 'frames ${JSON.stringify(KERNEL_FRAMES)} version 0' ;;
     memory) printf '%s\\n' 'memory ${JSON.stringify(KERNEL_MEMORY)} version 0' ;;
+    record_frame)
+      if printf '%s' "$line" | grep -q '"bad"'; then
+        printf '%s\\n' 'error: record_frame rejected: nodes must be u32'
+      else
+        recorded=$((recorded + 1))
+        printf '%s\\n' 'recorded seq '$((recorded - 1))' version '$recorded
+      fi ;;
     *) echo 'error: unknown command' ;;
   esac
 done
@@ -282,6 +290,16 @@ test('createKernelSource answers sequential queries per channel', { timeout: 100
     const memory = await kernel.query('memory');
     assert.deepEqual(memory.payload, KERNEL_MEMORY);
     await assert.rejects(kernel.query('network'), /frames or memory/);
+    const receipt = await kernel.recordFrame({
+      startMs: 5, frameMs: 16, budgetMs: 16, nodes: 12, effects: 0,
+      report: { p50Ms: 16, p95Ms: 16, fpsX10: 625, tier: 'full' },
+    });
+    assert.deepEqual(receipt, { seq: 0, version: 1 }, 'the receipt carries the ring seq for pull cursors');
+    await assert.rejects(
+      kernel.recordFrame({ bad: 1 }),
+      /error: record_frame/,
+      'a bad payload is a single error line, not a kernel exit',
+    );
   } finally {
     await kernel.stop();
     fs.rmSync(base, { recursive: true, force: true });
