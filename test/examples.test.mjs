@@ -46,10 +46,10 @@ function fakeRegistry() {
   return { dir, file, data };
 }
 
-test('the shipped registry is valid and covers the planned apps', () => {
+test('the shipped registry is valid and covers the planned apps', async () => {
   const file = defaultRegistry();
   if (!fs.existsSync(file)) return; // sibling repo absent: unit suite stays standalone
-  const data = loadRegistry(file);
+  const data = await loadRegistry(file);
   for (const name of SAMPLE_APPS) assert.ok(data.apps.some((app) => app.name === name), `missing app: ${name}`);
   for (const name of ['calculator', 'photos']) {
     assert.equal(data.apps.find((app) => app.name === name).source, `${name}.opu`);
