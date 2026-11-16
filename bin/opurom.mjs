@@ -14,7 +14,7 @@ import { benchSuite } from '../lib/bench_suite.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
-import { inspectDevState, inspectDevTree } from '../lib/inspect_dev.mjs';
+import { inspectDevDigest, inspectDevState, inspectDevTree } from '../lib/inspect_dev.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
@@ -72,10 +72,11 @@ Commands:
   inspect <ir.json> [--select <id>] [--layers] [--json]
                                   widget tree (ids, kinds, bounds, visibility);
                                   --select returns one node's ancestor path+subtree
-  inspect --dev [<url>] [--tree] [--select <id>] [--layers] [--json]
+  inspect --dev [<url>] [--tree|--digest] [--select <id>] [--layers] [--json]
                                   live views from a running "opurom dev" server
                                   (default :5178): state snapshot + recent
-                                  events, or --tree for the live IR widget tree
+                                  events, --tree for the live IR widget tree,
+                                  --digest for the golden digest + node diff
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [--verbose]
@@ -237,10 +238,19 @@ async function main(argv) {
         if (ir) throw new Error('usage: inspect accepts <ir.json> or --dev <url>, not both');
         const select = flags.select === undefined ? undefined
           : (flags.select === true ? '' : String(flags.select));
+        if (flagEnabled(flags, 'tree') && flagEnabled(flags, 'digest')) {
+          throw new Error('usage: inspect --dev takes --tree or --digest, not both');
+        }
         if (flagEnabled(flags, 'tree')) {
           return await inspectDevTree({
             url: flags.dev, select, layers: flagEnabled(flags, 'layers'), json: flagEnabled(flags, 'json'),
           });
+        }
+        if (flagEnabled(flags, 'digest')) {
+          if (flags.select !== undefined || flagEnabled(flags, 'layers')) {
+            throw new Error('usage: inspect --dev --digest takes only --json');
+          }
+          return await inspectDevDigest({ url: flags.dev, json: flagEnabled(flags, 'json') });
         }
         if (flags.select !== undefined || flagEnabled(flags, 'layers')) {
           throw new Error('usage: inspect --dev --select/--layers require --tree (the state view takes none)');

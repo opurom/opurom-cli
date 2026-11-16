@@ -195,7 +195,7 @@ test('CLI inspect refuses a positional IR together with --dev', () => {
   assert.match(result.stderr, /accepts <ir\.json> or --dev <url>, not both/);
   const help = run(process.execPath, [CLI, '--help'], { timeout: 20000 });
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /inspect --dev \[<url>\] \[--tree\] \[--select <id>\] \[--layers\] \[--json\]/);
+  assert.match(help.stdout, /inspect --dev \[<url>\] \[--tree\|--digest\] \[--select <id>\] \[--layers\] \[--json\]/);
 });
 
 // A renderer stub replaying bounds for the stub compiler's one-node IR; the
