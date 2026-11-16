@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpDir } from '../lib/paths.mjs';
 import { run } from '../lib/proc.mjs';
 import { dev } from '../lib/dev.mjs';
-import { devStateUrl, inspectDevState, stateViewJson, stateViewText } from '../lib/inspect_dev.mjs';
+import { devStateUrl, inspectDevState, inspectDevTree, stateViewJson, stateViewText } from '../lib/inspect_dev.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
 
@@ -24,12 +24,12 @@ case "$1" in
 esac
 `;
 
-function setup(name) {
+function setup(name, stub = STUB) {
   const base = tmpDir(name);
   const bin = path.join(base, 'bin');
   const src = path.join(base, 'main.opu');
   fs.mkdirSync(bin);
-  fs.writeFileSync(path.join(bin, 'opuromc'), STUB, { mode: 0o755 });
+  fs.writeFileSync(path.join(bin, 'opuromc'), stub, { mode: 0o755 });
   fs.writeFileSync(src, 'app Counter { state count = 0 }\n');
   const oldPath = process.env.PATH;
   process.env.PATH = `${bin}${path.delimiter}${oldPath ?? ''}`;
@@ -195,5 +195,145 @@ test('CLI inspect refuses a positional IR together with --dev', () => {
   assert.match(result.stderr, /accepts <ir\.json> or --dev <url>, not both/);
   const help = run(process.execPath, [CLI, '--help'], { timeout: 20000 });
   assert.equal(help.status, 0);
-  assert.match(help.stdout, /inspect --dev \[<url>\] \[--json\]/);
+  assert.match(help.stdout, /inspect --dev \[<url>\] \[--tree\] \[--select <id>\] \[--layers\] \[--json\]/);
+});
+
+// A renderer stub replaying bounds for the stub compiler's one-node IR; the
+// tree view must treat these as authoritative, same as the static view.
+const RENDERER_STUB = `#!/bin/sh
+prev=""
+a11y=""
+commands=""
+for arg in "$@"; do
+  if [ "$prev" = "--a11y" ]; then a11y="$arg"; fi
+  if [ "$prev" = "--commands" ]; then commands="$arg"; fi
+  prev="$arg"
+done
+if [ -n "$a11y" ]; then
+  printf '%s' '[{"id":1,"role":"text","label":"Counter","bounds":[10,20,120,24],"hidden":false}]' > "$a11y"
+fi
+if [ -n "$commands" ]; then printf '%s' '[]' > "$commands"; fi
+printf 'digest=0123456789abcdef\\n'
+printf 'dirty=1\\n'
+printf 'P6\\n1 1\\n255\\n' > "$4"
+`;
+
+// The stub compiler's `target` step ignores its input, so an unreadable IR
+// document still produces a serving dev server whose IR endpoint reports the
+// no-compile reason instead of a broken tree.
+const BROKEN_IR_STUB = STUB.replace(/\{"ir":[^']*\}/, 'not json');
+
+function workspaceWithRenderer() {
+  const base = tmpDir('inspect-dev-renderer-');
+  const renderer = path.join(base, 'opurom-render');
+  fs.writeFileSync(renderer, RENDERER_STUB, { mode: 0o755 });
+  return { base, renderer };
+}
+
+test('dev server serves the last-good IR document at /__opurom/ir', { timeout: 20000 }, async () => {
+  const env = setup('dev-inspect-ir-');
+  let handle;
+  try {
+    handle = await dev({
+      src: env.src, port: 0, root: env.base, signals: false, backend: false, log: () => {},
+    });
+    const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
+    const response = await fetch(`${baseUrl}/__opurom/ir`);
+    assert.equal(response.status, 200);
+    const payload = await response.json();
+    assert.equal(payload.ok, true);
+    assert.ok(payload.at, 'the endpoint stamps the IR with its build time');
+    assert.equal(payload.rebuilds, 1);
+    assert.equal(payload.ir.ir, '0.1.0');
+    assert.equal(payload.ir.app, 'Counter');
+    assert.equal(payload.ir.tree.id, 1);
+    const wrongMethod = await fetch(`${baseUrl}/__opurom/ir`, { method: 'POST' });
+    assert.equal(wrongMethod.status, 405);
+  } finally {
+    if (handle) await handle.close();
+    env.restore();
+  }
+});
+
+test('a dev server without a readable IR answers 404 with a reason', { timeout: 20000 }, async () => {
+  assert.match(BROKEN_IR_STUB, /not json/);
+  const env = setup('dev-inspect-ir-404-', BROKEN_IR_STUB);
+  let handle;
+  try {
+    handle = await dev({
+      src: env.src, port: 0, root: env.base, signals: false, backend: false, log: () => {},
+    });
+    const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
+    const response = await fetch(`${baseUrl}/__opurom/ir`);
+    assert.equal(response.status, 404);
+    assert.deepEqual(await response.json(), { ok: false, error: 'no compiled IR yet', reason: 'no-compile-yet' });
+    await assert.rejects(
+      inspectDevTree({ url: baseUrl, renderer: '/bin/true', log: () => {} }),
+      /has no compiled IR yet \(reason: no-compile-yet\)/,
+    );
+  } finally {
+    if (handle) await handle.close();
+    env.restore();
+  }
+});
+
+test('inspect --dev --tree renders the live IR tree as text and stable JSON', { timeout: 20000 }, async () => {
+  const env = setup('dev-inspect-tree-');
+  const { renderer } = workspaceWithRenderer();
+  let handle;
+  try {
+    handle = await dev({
+      src: env.src, port: 0, root: env.base, signals: false, backend: false, log: () => {},
+    });
+    const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
+
+    const lines = [];
+    const code = await inspectDevTree({ url: baseUrl, renderer, log: (line) => lines.push(String(line)) });
+    assert.equal(code, 0);
+    const text = lines.join('\n');
+    assert.match(text, /Opurom inspect widget tree/);
+    assert.match(text, /app: Counter \(ir 0\.1\.0\)/);
+    assert.match(text, /#1 Text bounds=\[10,20,120,24\]/);
+
+    const runJson = () => new Promise((resolve, reject) => {
+      const out = [];
+      inspectDevTree({ url: baseUrl, renderer, json: true, log: (line) => out.push(String(line)) })
+        .then((value) => resolve({ value, text: out.join('\n') }), reject);
+    });
+    const first = await runJson();
+    const second = await runJson();
+    assert.deepEqual(first.value, 0);
+    assert.equal(first.text, second.text, 'the JSON form is byte-stable');
+    const parsed = JSON.parse(first.text);
+    assert.deepEqual(Object.keys(parsed), ['command', 'mode', 'app', 'viewport', 'selected', 'nodes']);
+    assert.equal(parsed.mode, 'tree');
+    assert.equal(parsed.nodes[0].id, 1);
+    assert.deepEqual(parsed.nodes[0].bounds, [10, 20, 120, 24]);
+
+    await assert.rejects(
+      inspectDevTree({ url: baseUrl, renderer, select: '9', log: () => {} }),
+      /unknown node id: 9/,
+    );
+    const selected = [];
+    await inspectDevTree({ url: baseUrl, renderer, select: '1', log: (line) => selected.push(String(line)) });
+    assert.match(selected.join('\n'), /#1 Text/);
+  } finally {
+    if (handle) await handle.close();
+    env.restore();
+  }
+});
+
+test('inspect --dev --tree fails clearly without a dev server and through the CLI', () => {
+  const { renderer } = workspaceWithRenderer();
+  return assert.rejects(
+    inspectDevTree({ url: 'http://127.0.0.1:1', renderer, log: () => {} }),
+    /dev server not reachable at http:\/\/127\.0\.0\.1:1/,
+  ).then(() => {
+    const cli = run(process.execPath, [CLI, 'inspect', '--dev', 'http://127.0.0.1:1', '--tree'], { timeout: 20000 });
+    assert.equal(cli.status, 1);
+    assert.match(cli.stderr, /dev server not reachable at http:\/\/127\.0\.0\.1:1/);
+    const badFlags = run(process.execPath, [CLI, 'inspect', '--dev', '--select', '1'], { timeout: 20000 });
+    assert.equal(badFlags.status, 1);
+    assert.match(badFlags.stderr, /--select\/--layers require --tree/);
+  });
 });
