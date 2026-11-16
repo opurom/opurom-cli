@@ -141,6 +141,7 @@ test('the dev server relays frames and memory over SSE and the pull endpoints', 
   try {
     handle = await dev({
       src: env.src, port: 0, root: env.base, signals: false, backend: false, log: () => {},
+      inspector: fileURLToPath(new URL('./fixtures/inspector', import.meta.url)),
     });
     const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
 
@@ -205,8 +206,8 @@ test('the dev server relays frames and memory over SSE and the pull endpoints', 
     assert.deepEqual(network.records, [], 'the bundle consumes the records key');
 
     const bundle = await fetch(`${baseUrl}/inspector`);
-    assert.equal(bundle.status, 200, 'the CLI hosts the opurom-web bundle at /inspector');
-    assert.match(await bundle.text(), /<html/i);
+    assert.equal(bundle.status, 200, 'the CLI hosts the supplied inspector bundle at /inspector');
+    assert.match(await bundle.text(), /opurom-inspector-fixture/i, 'the fixture bundle is served, not a sibling');
   } finally {
     if (controller) controller.abort();
     if (handle) await handle.close();
