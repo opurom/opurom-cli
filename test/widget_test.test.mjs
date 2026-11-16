@@ -79,3 +79,29 @@ test('discoverScripts finds .wtest.json recursively and nothing else', () => {
   const found = discoverScripts(dir).map((file) => path.basename(file)).sort();
   assert.deepEqual(found, ['a.wtest.json', 'b.wtest.json']);
 });
+
+test('a script can drive a source file with no checked-in IR', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opurom-wtest-'));
+  const src = path.join(workspaceRoot(), 'opurom-examples', 'profile.opu');
+  const result = runWidgetScript(writeScript(dir, {
+    src, width: 320, height: 240,
+    steps: [{ input: 9, value: 'Ada' }, { tap: 11 }],
+    expect: { state: { name: 'Ada', dark: true } },
+  }));
+  assert.equal(result.status, 'PASS', result.failures.join('; '));
+  const again = runWidgetScript(writeScript(dir, {
+    src, width: 320, height: 240,
+    steps: [{ input: 9, value: 'Ada' }, { tap: 11 }],
+    expect: { state: { name: 'Ada', dark: true } },
+  }));
+  assert.equal(again.digest, result.digest, 'source-driven digest must be deterministic');
+});
+
+test('a script with both ir and src is rejected', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'opurom-wtest-'));
+  const result = runWidgetScript(writeScript(dir, {
+    ir: goldenCounter, src: goldenCounter, steps: [], expect: {},
+  }));
+  assert.equal(result.status, 'FAIL');
+  assert.match(result.failures[0], /exactly one/);
+});
