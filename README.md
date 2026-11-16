@@ -727,6 +727,38 @@ process survives. Native preview requires single-target dev (`--targets native`)
 multi-target dev lowers native sources without a cargo build, so the preview is
 reported disabled in `/health`.
 
+## Inspector data plane relay
+
+`dev` relays the three observation channels from
+`opurom-spec/INSPECTOR_DATA_PLANE.md`: a frame timeline, memory and network.
+
+```sh
+node bin/opurom.mjs dev --src app.opu                  # web-dom page agent feeds frames
+node bin/opurom.mjs dev --src app.opu --kernel ./opurom-kernel   # runtime kernel feeds frames+memory
+curl -s http://127.0.0.1:5178/api/inspect/frames?since=0
+curl -s http://127.0.0.1:5178/api/inspect/memory
+curl -s http://127.0.0.1:5178/api/inspect/network
+```
+
+The SSE stream also emits `event: frame|memory|network` frames with the same
+records. Every response carries `availability: full|partial|absent` and a
+`reason`; a channel with no source is `absent`, never a fabricated `0`, and
+absent mirrors inside a record stay `null`. A hot reload resets the three rings
+and bumps `version`, so consumers can see the gap.
+
+The web-dom page agent measures rAF deltas and runs the tier state machine from
+`lib/frame_tier.mjs` — the exact tested mirror of `opurom-render/src/perf.rs`
+(`WINDOW_FRAMES=20`, integer nearest-rank p95, degrade above the 16 ms target,
+promote after three windows under 12 ms), pinned by
+`test/fixtures/frame-tier-golden.json`. The same function text is injected into
+the page, so the mirror cannot drift from the tested copy.
+
+`--kernel <bin>` points the relay at the opurom-core runtime kernel, which owns
+the `frames [sinceSeq]` and `memory` protocol commands; one kernel process per
+compiled IR, restarted on every applied reload. `--inspector <dir>` overrides
+the bundle directory hosted at `/inspector` (default: the opurom-web bundle,
+which the CLI only serves — it never builds it).
+
 ## `bench`: measured numbers only
 
 ```sh

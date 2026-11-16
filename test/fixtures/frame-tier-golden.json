@@ -1,0 +1,41 @@
+{
+  "comment": "Hand-derived from the documented perf.rs window rules (WINDOW_FRAMES=20, integer nearest-rank percentile ceil(p*len/100), degrade on p95 > 16ms, promote after 3 consecutive windows under 12ms). The mirror module injected into the page must reproduce exactly these tier sequences; when the opurom-core `frames` protocol command lands, these vectors are cross-checked against real perf.rs output.",
+  "cases": [
+    {
+      "name": "two drops a window apart",
+      "hz": 60,
+      "samples": [20, 40],
+      "repeat": [20, 20],
+      "tiers": ["full", "reduced", "minimal"],
+      "tierIndices": [[0, 18], [19, 38], [39, 39]],
+      "report": { "p50Ms": 20, "p95Ms": 40, "tier": "minimal" }
+    },
+    {
+      "name": "drop then promote after three quiet windows",
+      "hz": 60,
+      "samples": [20, 10],
+      "repeat": [20, 60],
+      "tiers": ["full", "reduced", "full"],
+      "tierIndices": [[0, 18], [19, 78], [79, 79]],
+      "report": { "p50Ms": 10, "p95Ms": 20, "tier": "full" }
+    },
+    {
+      "name": "two over-budget samples drop the window",
+      "hz": 60,
+      "samples": [10, 17],
+      "repeat": [18, 2],
+      "tiers": ["full", "reduced"],
+      "tierIndices": [[0, 18], [19, 19]],
+      "report": { "p50Ms": 10, "p95Ms": 17, "tier": "reduced" }
+    },
+    {
+      "name": "a window at exactly the target does not drop",
+      "hz": 60,
+      "samples": [10, 16],
+      "repeat": [18, 2],
+      "tiers": ["full"],
+      "tierIndices": [[0, 19]],
+      "report": { "p50Ms": 10, "p95Ms": 16, "tier": "full" }
+    }
+  ]
+}

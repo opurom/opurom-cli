@@ -50,6 +50,9 @@ Commands:
   dev --src <src.opu> [--port N] [--sync] [--targets t1,t2]
                                   serve web-dom page with SSE hot reload (+ backend restart);
                                   --targets accepts nine dev targets; 2+ list them at /
+  dev ... [--kernel <opurom-core>] [--inspector <bundle-dir>]
+                                  relay the inspector data plane (frames/memory/network)
+                                  at /api/inspect/* and host the inspector at /inspector
   dev --src <src.opu> --android [--device <serial>]
                                   push state-preserving hot reload to an Android device
   dev --sync [--clients N] [--port N]
@@ -181,6 +184,8 @@ async function main(argv) {
       await dev({
         src, port, sync, targets: flags.targets,
         android: flagEnabled(flags, 'android') ? { serial: typeof flags.device === 'string' ? flags.device : undefined } : null,
+        kernel: typeof flags.kernel === 'string' ? { binary: flags.kernel } : null,
+        inspector: typeof flags.inspector === 'string' ? flags.inspector : undefined,
       });
       return 0; // the HTTP server keeps the process alive
     }
