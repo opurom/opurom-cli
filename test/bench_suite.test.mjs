@@ -19,6 +19,14 @@ const RENDER_SAMPLES = [5, 10, 15, 20];
 const RUNS = 4;
 const LEVELS = '_.:-=+*#%@';
 
+// Real-toolchain samples are a performance benchmark: timings depend on the
+// runner, so they are NOT a CI correctness gate. Opt in locally with
+// OPUROM_BENCH_LOCAL=1 after building ../opurom-{lang,render}. In CI (and any
+// default npm test) the gate reports an explicit N/A diagnostic instead of a
+// silent skip; test/bench_gate.test.mjs asserts that marker is present.
+const BENCH_LOCAL = process.env.OPUROM_BENCH_LOCAL === '1';
+const BENCH_NA = 'N/A - performance benchmark, run locally (OPUROM_BENCH_LOCAL=1)';
+
 function compilerStub(failWebDom = false) {
   const guard = failWebDom
     ? 'if [ "$4" = "web-dom" ]; then printf \'responsive DOM emitter not found: opurom-web/bin/opurom-web.mjs\\n\' >&2; exit 1; fi; '
@@ -473,10 +481,15 @@ test('CLI rejects --runs outside 1..1000 before invoking tools', () => {
 });
 
 test('real compiler and renderer samples are positive and finite', (t) => {
+  if (!BENCH_LOCAL) {
+    t.diagnostic(BENCH_NA);
+    return;
+  }
   const root = workspaceRoot();
   const compiler = discoverBinary(['opuromc'], { root, repo: 'opurom-lang' });
   const renderer = discoverBinary(['opurom-render', 'opurom_render'], { root, repo: 'opurom-render' });
-  if (!compiler || !renderer) return t.skip('opuromc or opurom-render binary unavailable');
+  assert.ok(compiler, 'OPUROM_BENCH_LOCAL=1 requires a built opuromc binary');
+  assert.ok(renderer, 'OPUROM_BENCH_LOCAL=1 requires a built opurom-render binary');
   const lines = [];
   const { record } = benchSuite({
     runs: 2,

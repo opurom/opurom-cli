@@ -4,13 +4,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { createFrameTier } from '../lib/frame_tier.mjs';
+import { discoverBinary, workspaceRoot } from '../lib/paths.mjs';
 
 // Cross-check against the render side's real --auto-degrade tier line
 // (render prints `tier=<t> rate=<hz> frames=<n> p50=<ms>ms p95=<ms>ms
-// target=<ms>ms promote=<ms>ms`). Gated on OPUROM_RENDER_TIER_BIN so the
-// offline suite stays standalone; point it at an opurom-render binary built
-// from the tier-line revision to run the live comparison.
-const RENDER_BIN = process.env.OPUROM_RENDER_TIER_BIN;
+// target=<ms>ms promote=<ms>ms`). This is a correctness gate: the mirror is a
+// rule-for-rule copy of render's integer state machine, so it must fail when
+// the authoritative binary is absent instead of silently skipping. CI builds
+// opurom-render and exports OPUROM_RENDER_TIER_BIN; locally the sibling target
+// dir is discovered. See .github/workflows/ci.yml (node-test job).
+const RENDER_BIN = process.env.OPUROM_RENDER_TIER_BIN
+  ?? discoverBinary(['opurom-render'], { root: workspaceRoot(), repo: 'opurom-render' });
 const IR = new URL('./fixtures/widget-inspect.opuir.json', import.meta.url);
 
 const CASES = [
@@ -21,7 +25,9 @@ const CASES = [
   { name: 'steady target samples keep full', pattern: [16], samples: 20 },
 ];
 
-test('the page-agent mirror matches the real render tier lines', { skip: !RENDER_BIN }, (t) => {
+test('the page-agent mirror matches the real render tier lines', () => {
+  assert.ok(RENDER_BIN, 'opurom-render binary required: build ../opurom-render or set OPUROM_RENDER_TIER_BIN');
+  assert.ok(fs.existsSync(RENDER_BIN), `opurom-render binary missing: ${RENDER_BIN}`);
   for (const item of CASES) {
     const out = execFileSync(RENDER_BIN, [
       path.resolve(fileURL(IR)), '320', '240', '/tmp/opurom-tier-check.ppm',
@@ -48,6 +54,10 @@ function fileURL(url) {
   return decodeURIComponent(url.pathname);
 }
 
-test('the mirror handles a missing binary by skipping, not failing', () => {
-  assert.equal(fs.existsSync(RENDER_BIN ?? '/nonexistent'), RENDER_BIN ? true : false);
+test('a missing render binary fails closed instead of skipping', () => {
+  // The gate must not be a fake door: with no RENDER_BIN the comparison test
+  // above asserts and fails. Locally the sibling target is discovered; CI
+  // exports OPUROM_RENDER_TIER_BIN after building it.
+  assert.ok(RENDER_BIN, 'render binary must resolve via env or sibling target');
+  assert.equal(fs.existsSync(RENDER_BIN), true, `resolved binary must exist: ${RENDER_BIN}`);
 });

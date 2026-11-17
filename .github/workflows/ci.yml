@@ -80,6 +80,12 @@ jobs:
               ;;
             *) ;;
           esac
+      - name: Build opurom-render for the frame-tier gate
+        if: matrix.check == 'node-test' && github.event.repository.name == 'opurom-cli'
+        run: |
+          set -euo pipefail
+          cargo build --release --manifest-path "$GITHUB_WORKSPACE/../opurom-render/Cargo.toml"
+          echo "OPUROM_RENDER_TIER_BIN=$GITHUB_WORKSPACE/../opurom-render/target/release/opurom-render" >> "$GITHUB_ENV"
       - name: Run ${{ matrix.check }}
         run: node .github/scripts/ci-check.mjs ${{ matrix.check }}
 
