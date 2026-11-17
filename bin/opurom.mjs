@@ -79,9 +79,11 @@ Commands:
                                   --digest for the golden digest + node diff
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
-  test --examples [--filter <name>] [--jobs N] [--verbose]
+  test --examples [--filter <name>] [--jobs N] [--verbose] [--fail-fast]
                                   run registered example tests ctest-style
-  test --widget <file|dir> [--verbose]
+  test --widget <file|dir> [--verbose] [--fail-fast] [--update-goldens]
+                                  run interaction-test scripts (.wtest.json);
+                                  --update-goldens rewrites only changed digests
                                   run interaction-test scripts (.wtest.json)
 
 Run "node bin/opurom.mjs <command> --help" for the same summary.`;
@@ -265,13 +267,19 @@ async function main(argv) {
     case 'examples':
       await examplesList();
       return 0;
-    case 'test':
+    case 'test': {
+      const failFast = flagEnabled(flags, 'fail-fast');
+      const updateGoldens = flagEnabled(flags, 'update-goldens');
+      if (updateGoldens && flags.widget === undefined) {
+        throw new Error('usage: --update-goldens requires --widget (it rewrites .wtest.json digests)');
+      }
       if (flagEnabled(flags, 'examples')) {
         if (flags.filter === true) throw new Error('--filter requires a name');
         const { exitCode } = await runExampleTests({
           filter: typeof flags.filter === 'string' ? flags.filter : undefined,
           jobs: flags.jobs,
           verbose: flagEnabled(flags, 'verbose'),
+          failFast,
         });
         return exitCode;
       }
@@ -280,11 +288,14 @@ async function main(argv) {
         const target = path.resolve(flags.widget);
         const files = target.endsWith('.wtest.json') ? [target] : discoverScripts(target);
         if (files.length === 0) throw new Error(`no .wtest.json scripts found under ${target}`);
-        const { exitCode } = runWidgetTests(files, { verbose: flagEnabled(flags, 'verbose') });
+        const { exitCode } = runWidgetTests(files, {
+          verbose: flagEnabled(flags, 'verbose'), failFast, updateGoldens,
+        });
         return exitCode;
       }
       console.log('Opurom end-to-end tests');
-      return (await runE2e()).exitCode;
+      return (await runE2e({ failFast })).exitCode;
+    }
     default:
       throw new Error(`unknown command: ${command}\n\n${USAGE}`);
   }
