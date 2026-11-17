@@ -24,6 +24,7 @@ test('the plain benchmark run reports N/A, not a silent skip', () => {
   assert.equal(run.status, 0, `benchmark suite failed: ${run.stderr}`);
   const text = run.stdout + run.stderr;
   assert.match(text, MARKER, 'no explicit N/A marker: benchmark would be a silent fake door');
-  assert.doesNotMatch(text, /ℹ skipped [1-9]/, 'benchmark must not hide behind a skip');
-  assert.match(text, /ℹ fail 0/, 'N/A path must pass cleanly');
+  // GitHub CI runs the TAP reporter ('#'), a local run uses spec ('ℹ').
+  assert.doesNotMatch(text, /[#ℹ] skipped [1-9]/, 'benchmark must not hide behind a skip');
+  assert.match(text, /[#ℹ] fail 0/, 'N/A path must pass cleanly');
 });
