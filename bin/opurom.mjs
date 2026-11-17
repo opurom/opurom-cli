@@ -79,7 +79,7 @@ Commands:
                                   --digest for the golden digest + node diff
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
-  test --examples [--filter <name>] [--jobs N] [--verbose] [--fail-fast]
+  test --examples [--filter <name>] [--jobs N] [-j N] [--verbose] [--fail-fast]
                                   run registered example tests ctest-style
   test --widget <file|dir> [--verbose] [--fail-fast] [--update-goldens]
                                   run interaction-test scripts (.wtest.json);
@@ -275,13 +275,20 @@ async function main(argv) {
       }
       if (flagEnabled(flags, 'examples')) {
         if (flags.filter === true) throw new Error('--filter requires a name');
+        if (flags.concurrency !== undefined && flags.jobs !== undefined) {
+          throw new Error('usage: --jobs and --concurrency/-j are aliases; pass only one');
+        }
+        const jobs = flags.concurrency ?? flags.jobs;
         const { exitCode } = await runExampleTests({
           filter: typeof flags.filter === 'string' ? flags.filter : undefined,
-          jobs: flags.jobs,
+          jobs,
           verbose: flagEnabled(flags, 'verbose'),
           failFast,
         });
         return exitCode;
+      }
+      if (flags.concurrency !== undefined) {
+        throw new Error('usage: --concurrency/-j applies only to --examples');
       }
       if (flags.widget !== undefined) {
         if (flags.widget === true) throw new Error('--widget requires a script file or directory');

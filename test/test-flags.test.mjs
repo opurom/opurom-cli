@@ -95,6 +95,31 @@ test('--update-goldens rewrites only changed digests and is idempotent', () => {
   assert.equal(fs.readFileSync(stale, 'utf8'), JSON.stringify(staleAfter, null, 2) + '\n');
 });
 
+test('--concurrency/-j maps to --jobs on --examples, never silently ignored', async () => {
+  // An unmatched filter is a fast path that still reports the resolved jobs,
+  // so the flag is observed without running the real toolchain.
+  const runJobs = async (...args) => {
+    const result = run(process.execPath, [CLI, 'test', '--examples', '--filter', 'nonexistent-xyz', ...args], { timeout: 20000 });
+    assert.equal(result.status, 0, `stderr=${result.stderr}`);
+    return /jobs: (\d+)/.exec(result.stdout)?.[1];
+  };
+  assert.equal(await runJobs('--jobs', '3'), '3');
+  assert.equal(await runJobs('--concurrency', '3'), '3', '--concurrency must not fall back to the default');
+  assert.equal(await runJobs('-j', '3'), '3', '-j must be the short alias of --concurrency');
+
+  const invalid = run(process.execPath, [CLI, 'test', '--examples', '--filter', 'nonexistent-xyz', '--concurrency', '3.5'], { timeout: 20000 });
+  assert.equal(invalid.status, 1);
+  assert.match(invalid.stderr, /invalid --jobs: 3\.5/);
+
+  const conflict = run(process.execPath, [CLI, 'test', '--examples', '--jobs', '2', '--concurrency', '3'], { timeout: 20000 });
+  assert.equal(conflict.status, 1);
+  assert.match(conflict.stderr, /--jobs and --concurrency\/-j are aliases/);
+
+  const onWidget = run(process.execPath, [CLI, 'test', '--widget', 'x.wtest.json', '-j', '2'], { timeout: 20000 });
+  assert.equal(onWidget.status, 1);
+  assert.match(onWidget.stderr, /--concurrency\/-j applies only to --examples/);
+});
+
 test('--update-goldens without --widget is a usage error', () => {
   const result = run(process.execPath, [CLI, 'test', '--update-goldens'], { timeout: 20000 });
   assert.equal(result.status, 1);
