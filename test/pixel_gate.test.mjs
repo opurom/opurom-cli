@@ -143,3 +143,18 @@ test('a failed comparison reports the golden, error and diff artifact keys', () 
   assert.deepEqual(row.diffArtifacts, ['masterImage', 'testImage', 'maskedDiff', 'isolatedDiff']);
   assert.equal(row.maxErrorGated, false);
 });
+
+test('missing golden files fail with the Flutter non-existent-file contract', () => {
+  // Flutter LocalFileComparator.getGoldenBytes (_goldens_io.dart:118-129)
+  // fails with "Could not be compared against non-existent file" when the
+  // golden is absent; it never silently skips.
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-golden-missing-'));
+  const manifestPath = path.join(dir, GOLDEN_MANIFEST);
+  mkdirSync(path.dirname(manifestPath), { recursive: true });
+  writeFileSync(manifestPath, JSON.stringify({
+    screens: [{ file: 'absent.png', bytes: 1, sha256: '0'.repeat(64), theme: 'light' }],
+  }));
+  const result = verifyGoldenManifest({ root: dir });
+  assert.equal(result.status, 'FAIL');
+  assert.equal(result.rows[0].reason, 'golden file missing');
+});
