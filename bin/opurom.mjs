@@ -8,6 +8,7 @@ import {
 } from '../lib/config.mjs';
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { analyze } from '../lib/analyze.mjs';
+import { pub } from '../lib/pub.mjs';
 import { modePlan } from '../lib/build_mode.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
@@ -42,6 +43,8 @@ Commands:
        [--format json|ndjson|text] [--out <file>]
                                   read/export dev log exports or saved log files
   targets                         list the IR emitters
+  pub <subcommand> [arguments...]  forward dependency commands to opurom-pkg
+                                  (get/upgrade/add/remove/outdated/deps/...)
   init --list
                                   list starter templates
   init <dir> [--template <name>]
@@ -165,7 +168,7 @@ async function main(argv) {
       if (flags[flag] === true) throw new Error(`missing required value for ${key}`);
     }
   }
-  if (!command || flags.help || command === 'help') {
+  if (!command || (flags.help && command !== 'pub') || command === 'help') {
     console.log(USAGE);
     return 0;
   }
@@ -223,6 +226,10 @@ async function main(argv) {
         cwd,
         log: console.log,
       });
+      return code;
+    }
+    case 'pub': {
+      const { code } = pub({ argv: process.argv.slice(3) });
       return code;
     }
     case 'targets':
