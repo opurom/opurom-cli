@@ -169,3 +169,30 @@ test('performance baselines are archived as N/A, PASS or FAIL without fake resul
     delete process.env.OPUROM_PERF_SAMPLES;
   }
 });
+
+test('an invalid archived report is rejected instead of replayed as green', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-latest-invalid-'));
+  const file = path.join(dir, 'bad.json');
+  writeFileSync(file, JSON.stringify({ schema: 'opurom.test-report/v1', summary: { FAIL: '1' } }));
+  assert.throws(() => readArchivedReport(file), /invalid test report/);
+  const result = run(['test', '--report', '--latest', '--out', dir]);
+  assert.equal(result.status, 1, 'a corrupt archive must fail closed');
+  assert.match(result.stderr, /invalid test report/);
+});
+
+test('an empty archive directory reports no report instead of succeeding', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-latest-empty-'));
+  const result = run(['test', '--report', '--latest', '--out', dir]);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /no archived test report found/);
+});
+
+test('--report rejects overlapping flags and never writes on failure', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-report-conflict-'));
+  for (const extra of ['--latest', '--examples']) {
+    const result = run(['test', '--report', '--out', dir, extra]);
+    assert.equal(result.status, 1, `${extra} was accepted`);
+    assert.match(result.stderr, /--report is standalone|no archived test report found/);
+  }
+  assert.equal(readdirSync(dir).length, 0, 'a rejected command must not archive');
+});
