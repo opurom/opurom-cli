@@ -13,12 +13,12 @@
 // Exit 0 only when all checks pass; every run prints one JSON document.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compilerPath } from '../lib/build.mjs';
-import { workspaceRoot } from '../lib/paths.mjs';
+import { ensureSiblingBinary, workspaceRoot } from '../lib/paths.mjs';
 
 const CLI_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = workspaceRoot(CLI_ROOT);
@@ -62,13 +62,13 @@ function rng(seed = SEED) {
 }
 
 function rendererBinary() {
-  for (const profile of ['debug', 'release']) {
-    for (const name of ['opurom-render', 'opurom_render']) {
-      const file = path.join(ROOT, 'opurom-render', 'target', profile, name);
-      if (existsSync(file)) return file;
-    }
-  }
-  return null;
+  const found = ensureSiblingBinary('opurom-render', ['opurom-render', 'opurom_render'], {
+    root: ROOT,
+    log: () => {},
+  });
+  assert.ok(!found.skip, `opurom-render source is required for the fuzz gate: ${found.reason}`);
+  assert.ok(found.path, `opurom-render binary is required for the fuzz gate: ${found.reason}`);
+  return found.path;
 }
 
 const dir = mkdtempSync(path.join(tmpdir(), 'opurom-fuzz-contract-'));
