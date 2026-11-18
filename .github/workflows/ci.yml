@@ -56,7 +56,7 @@ jobs:
             opurom-platform|opurom-cli)
               # The interaction/widget tests drive the real compiler and
               # renderer from sibling checkouts.
-              for repo in opurom-examples opurom-core opurom-lang opurom-render; do
+              for repo in opurom-examples opurom-core opurom-lang opurom-render opurom-debug opurom-pkg; do
                 git clone --depth 1 "https://github.com/opurom/${repo}.git" "$repo"
               done
               ;;
