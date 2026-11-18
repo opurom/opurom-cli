@@ -11,7 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { tmpDir } from '../lib/paths.mjs';
 import { run } from '../lib/proc.mjs';
 import {
-  decideIncremental, formatIncrementalDecision, incrementalDecisionJson, INCREMENTAL_DECISION_SCHEMA,
+  decideIncremental, formatIncrementalDecision, incrementalDecisionJson,
+  INCREMENTAL_DECISION_SCHEMA, INCREMENTAL_ENFORCEMENT,
 } from '../lib/incremental_decision.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
@@ -108,7 +109,7 @@ test('fixed source-change sequence yields byte-identical report fields', () => {
     const report = JSON.parse(a);
     assert.deepEqual(Object.keys(report), [
       'schema', 'status', 'enforcement', 'dirty', 'skipped', 'steps', 'summary',
-      'src', 'target', 'out', 'executedSteps',
+      'src', 'target', 'out', 'executedSteps', 'lastExecutedSteps',
     ]);
     assert.ok(!/at\b|time|timestamp|mtime|duration|elapsed/i.test(a),
       'report must not contain wall-clock or duration fields');
@@ -214,6 +215,173 @@ test('multi-input dirty lists stay deterministic across import changes', () => {
     assert.deepEqual(report.dirty, []);
     assert.deepEqual(report.skipped, report.steps.map((row) => row.step));
     assert.ok(report.steps.every((row) => row.executed));
+    assert.ok(fs.existsSync(path.join(out, 'index.html')));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('enforced decisions skip only clean steps and reject invalid modes', () => {
+  const steps = ['compile', 'optimize', 'lower', 'postprocess'];
+  const clean = decideIncremental({ dirty: [], steps, enforcement: 'enforced' });
+  assert.deepEqual([...INCREMENTAL_ENFORCEMENT], ['none', 'enforced']);
+  assert.equal(clean.status, 'ENFORCED');
+  assert.equal(clean.enforcement, 'enforced');
+  assert.deepEqual(clean.steps.map((row) => row.action), steps.map(() => 'skipped'));
+  assert.ok(clean.steps.every((row) => !row.executed));
+  assert.deepEqual(clean.executedSteps ?? [], []);
+  assert.equal(clean.summary.executed, 0);
+  assert.match(formatIncrementalDecision(clean), /skipped \(actual\): compile, optimize, lower, postprocess/);
+
+  const dirty = decideIncremental({ dirty: ['/src/main.opu'], steps, enforcement: 'enforced' });
+  assert.equal(dirty.status, 'ENFORCED');
+  assert.deepEqual(dirty.skipped, []);
+  assert.ok(dirty.steps.every((row) => row.executed));
+  assert.equal(dirty.summary.executed, steps.length);
+  assert.throws(
+    () => decideIncremental({ steps, enforcement: 'guess' }),
+    /invalid incremental enforcement: guess/,
+  );
+});
+
+test('CLI enforcement is opt-in: default builds stay observed and byte-identical', () => {
+  const base = tmpDir('incremental-enforce-default-');
+  try {
+    const source = path.join(base, 'main.opu');
+    fs.writeFileSync(source, 'app Demo { Column { Text("enforce") } }\n');
+    const observedOut = path.join(base, 'observed');
+    const plainOut = path.join(base, 'plain');
+    const observedArgs = [
+      CLI, 'build', '--src', source, '--target', 'web-dom', '--out', observedOut, '--incremental',
+    ];
+    for (let i = 0; i < 2; i++) {
+      const result = run(process.execPath, observedArgs, { timeout: 120000 });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    const reportFile = path.join(observedOut, '.opurom-incremental', 'latest.json');
+    const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+    assert.equal(report.enforcement, 'none');
+    assert.equal(report.status, 'OBSERVED');
+    assert.deepEqual(report.executedSteps, report.steps.map((row) => row.step));
+
+    const plain = run(process.execPath, [
+      CLI, 'build', '--src', source, '--target', 'web-dom', '--out', plainOut,
+    ], { timeout: 120000 });
+    assert.equal(plain.status, 0, plain.stderr);
+    const files = fs.readdirSync(plainOut).filter((file) => !file.startsWith('.')).sort();
+    for (const file of files) {
+      assert.equal(
+        fs.readFileSync(path.join(observedOut, file)).toString('base64'),
+        fs.readFileSync(path.join(plainOut, file)).toString('base64'),
+        `${file} must stay byte-identical to a default build`,
+      );
+    }
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('enforcement skips clean steps, reproduces artifacts, and detects dirty outputs', () => {
+  const base = tmpDir('incremental-enforce-skip-');
+  try {
+    const source = path.join(base, 'main.opu');
+    const firstProgram = 'app Demo { Column { Text("first") } }\n';
+    const secondProgram = 'app Demo { Column { Text("second") } }\n';
+    fs.writeFileSync(source, firstProgram);
+    const out = path.join(base, 'out');
+    const args = [
+      CLI, 'build', '--src', source, '--target', 'web-dom', '--out', out,
+      '--incremental=enforce',
+    ];
+    const build = () => {
+      const result = run(process.execPath, args, { timeout: 120000 });
+      assert.equal(result.status, 0, result.stderr);
+    };
+    const reportFile = path.join(out, '.opurom-incremental', 'latest.json');
+    build(); // no recorded build: full rebuild
+    let report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+    assert.equal(report.enforcement, 'enforced');
+    assert.deepEqual(report.executedSteps, report.steps.map((row) => row.step));
+    const firstArtifacts = Object.fromEntries(
+      fs.readdirSync(out).filter((file) => !file.startsWith('.')).map((file) => [
+        file, fs.readFileSync(path.join(out, file)).toString('base64'),
+      ]),
+    );
+
+    build(); // clean: skip every step
+    report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+    assert.equal(report.status, 'ENFORCED');
+    assert.deepEqual(report.dirty, []);
+    assert.deepEqual(report.skipped, report.steps.map((row) => row.step));
+    assert.equal(report.executedSteps, undefined);
+    assert.deepEqual(report.lastExecutedSteps, report.steps.map((row) => row.step));
+    assert.ok(report.steps.every((row) => !row.executed));
+    const firstReport = fs.readFileSync(reportFile, 'utf8');
+    for (const [file, bytes] of Object.entries(firstArtifacts)) {
+      assert.equal(fs.readFileSync(path.join(out, file)).toString('base64'), bytes);
+    }
+
+    build(); // stable replay
+    assert.equal(fs.readFileSync(reportFile, 'utf8'), firstReport);
+
+    const index = path.join(out, 'index.html');
+    fs.writeFileSync(index, `${fs.readFileSync(index, 'utf8')}\n<!-- external edit -->`);
+    build(); // dirty output: full rebuild
+    report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+    assert.deepEqual(report.dirty, [index]);
+    assert.deepEqual(report.executedSteps, report.steps.map((row) => row.step));
+    assert.deepEqual(
+      Object.fromEntries(fs.readdirSync(out).filter((file) => !file.startsWith('.')).map((file) => [
+        file, fs.readFileSync(path.join(out, file)).toString('base64'),
+      ])),
+      firstArtifacts,
+    );
+
+    fs.writeFileSync(source, secondProgram);
+    build(); // source dirty: full rebuild
+    report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
+    assert.deepEqual(report.dirty, [source]);
+    assert.deepEqual(report.executedSteps, report.steps.map((row) => row.step));
+    assert.notEqual(
+      fs.readFileSync(index, 'utf8'),
+      Buffer.from(firstArtifacts['index.html'], 'base64').toString('utf8'),
+    );
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('enforcement errors clear recorded marks and the next build is a full rebuild', () => {
+  const base = tmpDir('incremental-enforce-error-');
+  try {
+    const source = path.join(base, 'main.opu');
+    const valid = 'app Demo { Column { Text("recover") } }\n';
+    fs.writeFileSync(source, valid);
+    const out = path.join(base, 'out');
+    const args = [
+      CLI, 'build', '--src', source, '--target', 'web-dom', '--out', out,
+      '--incremental=enforce',
+    ];
+    const build = () => run(process.execPath, args, { timeout: 120000 });
+    assert.equal(build().status, 0);
+
+    // A failing enforced build must not leave stale marks that could skip work.
+    fs.writeFileSync(source, 'app Demo { Column(\n');
+    const failed = build();
+    assert.notEqual(failed.status, 0);
+    assert.ok(!fs.existsSync(path.join(out, '.opurom-filecache.json')));
+    assert.ok(!fs.existsSync(path.join(out, '.opurom-outputcache.json')));
+    assert.ok(!fs.existsSync(path.join(out, '.opurom-incremental', 'latest.json')));
+
+    fs.writeFileSync(source, valid);
+    const recovered = build();
+    assert.equal(recovered.status, 0, recovered.stderr);
+    const report = JSON.parse(
+      fs.readFileSync(path.join(out, '.opurom-incremental', 'latest.json'), 'utf8'),
+    );
+    assert.equal(report.enforcement, 'enforced');
+    assert.deepEqual(report.skipped, []);
+    assert.deepEqual(report.lastExecutedSteps, report.steps.map((row) => row.step));
     assert.ok(fs.existsSync(path.join(out, 'index.html')));
   } finally {
     fs.rmSync(base, { recursive: true, force: true });

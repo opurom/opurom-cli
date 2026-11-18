@@ -59,8 +59,9 @@ Commands:
                                   static quality gate over the project sources
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   [--timings] [--timings-file <file>]
-                                  [--incremental]
-                                  compile IR and lower to a target
+                                  [--incremental[=enforce]]
+                                  compile IR and lower to a target; incremental
+                                  observes by default, enforce skips clean steps
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target web-dom --out <dir>
                                   responsive DOM page that reflows on browser resize
@@ -331,7 +332,8 @@ async function main(argv) {
         env: runtimeEnv, environment, buildInfo, modeContext,
         timings: flagEnabled(flags, 'timings'),
         timingsFile: typeof flags['timings-file'] === 'string' ? flags['timings-file'] : null,
-        incremental: flagEnabled(flags, 'incremental'),
+        incremental: flagEnabled(flags, 'incremental') || flags.incremental === 'enforce',
+        incrementalEnforce: flags.incremental === 'enforce',
       });
       return 0;
     }
