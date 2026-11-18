@@ -12,6 +12,7 @@
     "test-scheduling-contract",
     "golden-failure-contract",
     "gesture-timing-contract",
-    "cross-target-artifact-contract"
+    "cross-target-artifact-contract",
+    "fuzz-input-corpus-contract"
   ]
 }
