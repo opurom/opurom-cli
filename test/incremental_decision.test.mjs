@@ -11,25 +11,27 @@ import { fileURLToPath } from 'node:url';
 import { tmpDir } from '../lib/paths.mjs';
 import { run } from '../lib/proc.mjs';
 import {
-  decideIncremental, formatIncrementalDecision, INCREMENTAL_DECISION_SCHEMA,
+  decideIncremental, formatIncrementalDecision, incrementalDecisionJson, INCREMENTAL_DECISION_SCHEMA,
 } from '../lib/incremental_decision.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
 
-test('dirty inputs force every step to run; clean inputs only propose skipping compile', () => {
+test('dirty inputs run all steps; clean inputs propose skipping every step', () => {
   const steps = ['compile', 'lower'];
   const dirty = decideIncremental({ dirty: ['src/main.opu'], steps });
   assert.equal(dirty.schema, INCREMENTAL_DECISION_SCHEMA);
   assert.equal(dirty.status, 'OBSERVED');
   assert.equal(dirty.enforcement, 'none');
   assert.deepEqual(dirty.dirty, ['src/main.opu']);
+  assert.deepEqual(dirty.skipped, []);
   assert.deepEqual(dirty.steps.map((row) => row.action), ['run', 'run']);
   assert.deepEqual(dirty.steps.map((row) => row.executed), [true, true]);
 
   const clean = decideIncremental({ dirty: [], steps });
-  assert.deepEqual(clean.steps.map((row) => row.action), ['would-skip', 'run']);
-  assert.equal(clean.summary.wouldSkip, 1);
-  assert.match(formatIncrementalDecision(clean), /compile: would-skip \(executed=true\)/);
+  assert.deepEqual(clean.steps.map((row) => row.action), ['would-skip', 'would-skip']);
+  assert.deepEqual(clean.skipped, ['compile', 'lower']);
+  assert.equal(clean.summary.skipped, 2);
+  assert.match(formatIncrementalDecision(clean), /skipped \(proposed\): compile, lower/);
   assert.match(formatIncrementalDecision(clean), /enforcement: none/);
 });
 
@@ -64,4 +66,83 @@ test('real incremental builds emit a stable decision report without skipping wor
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
+});
+
+test('fixed source-change sequence yields byte-identical report fields', () => {
+  const base = tmpDir('incremental-sequence-');
+  try {
+    const source = path.join(base, 'main.opu');
+    const outA = path.join(base, 'out-a');
+    const outB = path.join(base, 'out-b');
+    const program = (label) => `app Demo {
+  Column(gap: 8) {
+    Text("${label}")
+  }
+}
+`;
+    // Same fixed sequence applied to two isolated output directories.
+    const sequence = [program('a'), program('b'), program('b'), program('c')];
+    const runSequence = (out) => {
+      fs.rmSync(out, { recursive: true, force: true });
+      const args = [
+        CLI, 'build', '--src', source, '--target', 'web-dom', '--out', out, '--incremental',
+      ];
+      for (const text of sequence) {
+        fs.writeFileSync(source, text);
+        const result = run(process.execPath, args, { timeout: 120000 });
+        assert.equal(result.status, 0, result.stderr);
+      }
+      return fs.readFileSync(path.join(out, '.opurom-incremental', 'latest.json'), 'utf8');
+    };
+    const a = runSequence(outA);
+    const b = runSequence(outB);
+    const stableFields = ['dirty', 'skipped', 'steps', 'summary', 'executedSteps'];
+    const stable = (text) => {
+      const report = JSON.parse(text);
+      return JSON.stringify(stableFields.map((field) => report[field]));
+    };
+    assert.equal(stable(a), stable(b), 'same fixed sequence must produce byte-identical decision fields');
+    assert.equal(runSequence(outA), a, 'same output path and sequence must produce byte-identical reports');
+    const report = JSON.parse(a);
+    assert.deepEqual(Object.keys(report), [
+      'schema', 'status', 'enforcement', 'dirty', 'skipped', 'steps', 'summary',
+      'src', 'target', 'out', 'executedSteps',
+    ]);
+    assert.ok(!/at\b|time|timestamp|mtime|duration|elapsed/i.test(a),
+      'report must not contain wall-clock or duration fields');
+    assert.deepEqual(report.dirty, [source]);
+    assert.deepEqual(report.skipped, []);
+    assert.ok(report.executedSteps.every((step, index) => step === report.steps[index].step));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('unchanged source reports all steps skipped in deterministic order', () => {
+  const base = tmpDir('incremental-clean-');
+  try {
+    const source = path.join(base, 'main.opu');
+    fs.writeFileSync(source, 'app Demo { Column { Text("unchanged") } }\n');
+    const out = path.join(base, 'out');
+    const args = [CLI, 'build', '--src', source, '--target', 'web-dom', '--out', out, '--incremental'];
+    for (let i = 0; i < 2; i++) {
+      const result = run(process.execPath, args, { timeout: 120000 });
+      assert.equal(result.status, 0, result.stderr);
+    }
+    const report = JSON.parse(fs.readFileSync(path.join(out, '.opurom-incremental', 'latest.json'), 'utf8'));
+    assert.deepEqual(report.dirty, []);
+    assert.deepEqual(report.skipped, report.steps.map((row) => row.step));
+    assert.equal(report.summary.skipped, report.steps.length);
+    assert.equal(report.steps.every((row) => row.executed), true);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('non-deterministic fields are rejected from the report serializer', () => {
+  const decision = decideIncremental({ dirty: [], steps: ['compile'] });
+  assert.throws(
+    () => incrementalDecisionJson(decision, { generatedAt: new Date().toISOString() }),
+    /non-deterministic incremental report field: generatedAt/,
+  );
 });
