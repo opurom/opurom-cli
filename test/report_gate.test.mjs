@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { archiveReport, buildReport, latestReport, readArchivedReport, reportJson } from '../lib/test_report.mjs';
+import { baselineRecord } from '../lib/perf_baseline.mjs';
 import { FLUTTER_VERSION, GESTURE_CONSTANTS, PERF_GATE, PIXEL_GATE } from '../lib/test_authority.mjs';
 
 const CLI_ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -137,4 +138,34 @@ test('mutated authority constants fail the source-proof test', () => {
   assert.equal(row.status, 'FAIL');
   const baseline = buildReport({ root: WORKSPACE });
   assert.equal(row.status !== baseline.rows.find((r) => r.name === row.name).status, true);
+});
+
+test('performance baselines are archived as N/A, PASS or FAIL without fake results', () => {
+  const baseline = buildReport({ root: WORKSPACE });
+  const missing = baseline.rows.find((row) => row.name === 'performance:baseline');
+  assert.equal(missing.status, 'N/A');
+  assert.match(missing.reason, /OPUROM_PERF_BASELINE/);
+
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-report-perf-'));
+  const file = path.join(dir, 'baseline.json');
+  writeFileSync(file, JSON.stringify(baselineRecord({
+    scenario: 'counter-render', samples: [10, 11, 12], commit: 'test',
+  })));
+
+  process.env.OPUROM_PERF_BASELINE = file;
+  process.env.OPUROM_PERF_SAMPLES = '';
+  try {
+    const noSamples = buildReport({ root: WORKSPACE }).rows.find((row) => row.name === 'performance:baseline');
+    assert.equal(noSamples.status, 'N/A');
+    process.env.OPUROM_PERF_SAMPLES = '11,12';
+    const passed = buildReport({ root: WORKSPACE }).rows.find((row) => row.name === 'performance:baseline');
+    assert.equal(passed.status, 'PASS');
+    process.env.OPUROM_PERF_SAMPLES = '20,21';
+    const failed = buildReport({ root: WORKSPACE }).rows.find((row) => row.name === 'performance:baseline');
+    assert.equal(failed.status, 'FAIL');
+    assert.match(failed.reason, /p95 regression/);
+  } finally {
+    delete process.env.OPUROM_PERF_BASELINE;
+    delete process.env.OPUROM_PERF_SAMPLES;
+  }
 });
