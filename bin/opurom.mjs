@@ -13,7 +13,7 @@ import { modePlan } from '../lib/build_mode.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
-import { init, TEMPLATES } from '../lib/init.mjs';
+import { init, TEMPLATE_HELP, TEMPLATES } from '../lib/init.mjs';
 import { targetsFromBuiltins, validateBuildTarget } from '../lib/targets.mjs';
 import { runE2e } from '../lib/e2e.mjs';
 import { serve } from '../lib/serve.mjs';
@@ -238,7 +238,9 @@ async function main(argv) {
       return 0;
     case 'init': {
       if (flagEnabled(flags, 'list')) {
-        for (const name of TEMPLATES) console.log(name);
+        for (const name of TEMPLATES) {
+          console.log(flagEnabled(flags, 'verbose') ? `${name}\t${TEMPLATE_HELP[name]}` : name);
+        }
         return 0;
       }
       if (!positionals[1]) throw new Error('usage: init <dir>');

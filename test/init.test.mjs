@@ -37,7 +37,7 @@ test('init scaffolds a branded project and refuses to overwrite non-empty dirs',
   try {
     assert.equal(init(project), project);
     assert.deepEqual(fs.readdirSync(project).sort(), [
-      '.gitignore', 'README.md', 'favicon.ico', 'index.html', 'logo.png', 'opurom.json', 'src',
+      '.gitignore', 'README.md', 'assets', 'favicon.ico', 'index.html', 'logo.png', 'native', 'opurom.json', 'src',
     ]);
     const config = JSON.parse(fs.readFileSync(path.join(project, 'opurom.json'), 'utf8'));
     assert.equal(config.name, 'demo');
@@ -89,13 +89,18 @@ test('the particles template scaffolds a seeded particle field that the default 
   }
 });
 
-test('init --list prints the registered names deterministically', () => {
+test('init --list prints the registered names deterministically, with optional help', () => {
   const first = cli(['init', '--list']);
   const second = cli(['init', '--list']);
   assert.equal(first.status, 0, first.stderr);
   assert.equal(second.status, 0, second.stderr);
   assert.equal(first.stdout, `${TEMPLATES.join('\n')}\n`);
   assert.equal(second.stdout, first.stdout);
+  const verbose = cli(['init', '--list', '--verbose']);
+  assert.equal(verbose.status, 0, verbose.stderr);
+  for (const name of TEMPLATES) {
+    assert.match(verbose.stdout, new RegExp(`^${name}\\t.+$`, 'm'));
+  }
 });
 
 test('invalid template names produce a clear CLI error', () => {
