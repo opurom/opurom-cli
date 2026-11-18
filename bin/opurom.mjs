@@ -22,7 +22,7 @@ import { benchSuite } from '../lib/bench_suite.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
-import { inspectDevDigest, inspectDevState, inspectDevTree, inspectDevtools } from '../lib/inspect_dev.mjs';
+import { inspectDevDigest, inspectDevState, inspectDevTree, inspectDevtools, inspectPerformance } from '../lib/inspect_dev.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
@@ -99,6 +99,8 @@ Commands:
   devtools [<url>] [--json] [--panels]
                                   show DevTools session discovery and, with
                                   --panels, the frames/memory/network/logs views
+  perf [<url>] [--json]           show the measured frame-phase flame graph
+                                  from a running "opurom dev" server
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [-j N] [--verbose] [--fail-fast]
@@ -417,6 +419,9 @@ async function main(argv) {
       return await inspectDevtools({
         url, json: flagEnabled(flags, 'json'), panels: flagEnabled(flags, 'panels'),
       });
+    }
+    case 'perf': {
+      return await inspectPerformance({ url: positionals[1], json: flagEnabled(flags, 'json') });
     }
     case 'examples':
       await examplesList();
