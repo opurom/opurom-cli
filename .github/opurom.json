@@ -15,6 +15,7 @@
     "cross-target-artifact-contract",
     "fuzz-input-corpus-contract",
     "stability-resource-contract",
-    "report-archive-integrity-contract"
+    "report-archive-integrity-contract",
+    "contract-gate-verdict"
   ]
 }
