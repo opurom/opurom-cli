@@ -152,6 +152,40 @@ test('failed builds separate retryable from restart-required errors', { timeout:
   }
 });
 
+test('failed builds roll back the live IR and keep the last good state', { timeout: 30000 }, async () => {
+  const env = setup();
+  let handle;
+  try {
+    handle = await dev({
+      src: env.src, port: 0, root: env.base, signals: false, backend: false, log: () => {},
+    });
+    const baseUrl = `http://127.0.0.1:${handle.server.address().port}`;
+    const good = await (await fetch(`${baseUrl}/__opurom/ir`)).json();
+    assert.equal(good.ok, true);
+
+    fs.writeFileSync(env.modeFile, 'fail\n');
+    const failed = await (await post(baseUrl, { kind: 'reload' })).json();
+    assert.equal(failed.ok, false);
+    const after = await (await fetch(`${baseUrl}/__opurom/ir`)).json();
+    assert.equal(after.ok, true);
+    assert.deepEqual(after.ir, good.ir, 'a failed compile must not publish a partial IR');
+    const health = await (await fetch(`${baseUrl}/health`)).json();
+    assert.equal(health.lastErrorDetail.code, failed.code);
+
+    fs.rmSync(env.modeFile);
+    const recovered = await (await post(baseUrl, { kind: 'reload' })).json();
+    assert.equal(recovered.ok, true);
+    assert.equal(recovered.kind, 'hot');
+    const newer = await (await fetch(`${baseUrl}/__opurom/ir`)).json();
+    assert.notDeepEqual(newer.ir, good.ir, 'the next successful build must advance the IR');
+    const recoveredHealth = await (await fetch(`${baseUrl}/health`)).json();
+    assert.equal(recoveredHealth.lastError, null);
+  } finally {
+    if (handle) await handle.close();
+    env.restore();
+  }
+});
+
 test('SIGUSR1 triggers a manual reload', { timeout: 30000 }, async () => {
   const env = setup();
   let handle;

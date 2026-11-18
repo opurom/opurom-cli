@@ -582,6 +582,13 @@ dev: no reload for main.opu (unchanged)
 tested without real time. When no IR file is produced, `dev` falls back to a plain full
 reload, so the previous watch behavior is preserved.
 
+A failed compile is a rollback, not a partial publish: `GET /__opurom/ir` keeps serving the
+last successfully compiled IR and `/health` keeps the classified `lastErrorDetail`. The next
+successful build advances the IR again and clears the error. Flutter authority:
+`packages/flutter_tools/lib/src/run_hot.dart:985-991` (a failed DevFS synchronization returns
+an operation error before any view is reloaded) and `run_hot.dart:1094` (failed reassemble
+yields error code 1).
+
 ## `dev --sync`: dev preview hub
 
 ```sh
