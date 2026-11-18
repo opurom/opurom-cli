@@ -77,9 +77,9 @@ your shell and no npm packages are fetched.
 | `node bin/fuzz-input-corpus-contract.mjs` | Prints one `opurom.fuzz-input-corpus-contract/v1` JSON document pinning the fixed `0x4f505552` seed, malformed source/IR/gesture corpora and fail-closed crash checks (`binding.dart:1070/2295/2800`, `_goldens_io.dart:225-251`). Exits 1 on drift. |
 | `node bin/stability-resource-contract.mjs` | Prints one `opurom.stability-resource-contract/v1` JSON document with measured peak RSS, 200-event replay state and a byte-identical frame digest across eight renderer processes (`binding.dart:1326-1329`, `metrics_center.dart:103-113`, `macrobenchmarks/util.dart:38-70`). Exits 1 on drift. |
 | `node bin/report-archive-integrity-contract.mjs` | Prints one `opurom.report-archive-integrity-contract/v1` JSON document validating report schema, summary counters, provenance N/A/FAIL honesty, archive round-trip and `--latest` FAIL replay (`task_result.dart:106/132`, `metrics_center.dart:75-89/103-113`). Exits 1 on drift. |
-| `node bin/contract-gate-verdict.mjs` | Runs all eight read-only contract gates and prints one `opurom.contract-gate-verdict/v1` JSON document with per-gate schema, status, summary and exit code. Exits 0 only when all eight report PASS. |
+| `node bin/contract-gate-verdict.mjs` | Runs all nine read-only contract gates and prints one `opurom.contract-gate-verdict/v1` JSON document with per-gate schema, status, summary and exit code. Exits 0 only when all nine report PASS. |
 | `node bin/ci-manifest-consistency-contract.mjs` | Prints one `opurom.ci-manifest-consistency-contract/v1` JSON document proving `.github/workflows/ci.yml`, `.github/scripts/ci-check.mjs` and `.github/opurom.json` register the same check set. Exits 1 on manifest drift. |
-| `node bin/gate-artifact-manifest.mjs` | Runs all ten contract gates, writes their JSON documents to `artifacts/gate-contracts` (override with `OPUROM_GATE_ARTIFACTS`) and prints one `opurom.gate-artifact-manifest/v1` document with byte sizes and sha256 digests. Exits 1 if any gate drifts. |
+| `node bin/gate-artifact-manifest.mjs` | Runs all twelve contract gates, writes their JSON documents to `artifacts/gate-contracts` (override with `OPUROM_GATE_ARTIFACTS`) and prints one `opurom.gate-artifact-manifest/v1` document with byte sizes and sha256 digests. Exits 1 if any gate drifts. |
 | `node bin/ci-self-healing-contract.mjs` | Prints one `opurom.ci-self-healing-contract/v1` JSON document enforcing record-failure → retry exactly once → full-matrix revalidation on the same commit. External evidence can be supplied as `opurom.ci-healing-events/v1` JSON via `OPUROM_CI_HEALING_EVENTS`; otherwise a clearly labelled policy fixture is validated. Exits 1 on drift. |
 | `node bin/flutter-provenance-contract.mjs` | Prints one `opurom.flutter-provenance-contract/v1` JSON document verifying the pinned Flutter 3.50.0 / engine commits and all 18 cited file:line anchors in the local Flutter source tree. Exits 1 when a citation or pin drifts. |
 | `node bin/provenance-citation-consistency.mjs` | Prints one `opurom.provenance-citation-consistency/v1` JSON document proving every module-eight Flutter file:line citation is covered by the authoritative provenance registry. Exits 1 on an unregistered or stale anchor. |
@@ -1255,7 +1255,7 @@ lib/performance_profile.mjs measured frame-phase profiles and flame text
 lib/perf_compare.mjs baseline/current performance score comparison
 lib/plugin_market.mjs plugin manifest schema, SemVer ranges, offline index
 lib/build_timings.mjs measured per-step build timing records
-lib/file_store.mjs versioned hash/timestamp input cache
+lib/file_store.mjs versioned hash/timestamp input cache with lifecycle reset and atomic persist
 lib/incremental_decision.mjs observable dirty-input and step decisions
 lib/analyze.mjs       project source discovery + per-file quality gate and reports
 lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
@@ -1301,7 +1301,7 @@ test/performance_profile.test.mjs  measured phases, nearest-rank p95 and flame t
 test/perf_compare.test.mjs  score keys, regression gate, N/A and CLI artifacts (6)
 test/plugin_market.test.mjs  manifest schema, ranges, offline resolution and CLI (5)
 test/build_timings.test.mjs  timer contract, JSON artifact and real build (4)
-test/file_store.test.mjs  hash/timestamp marks, invalid cache, real incremental build (3)
+test/file_store.test.mjs  hash/timestamp marks, lifecycle reset, missing files, atomic persist, real incremental build (7)
 test/incremental_decision.test.mjs  dirty/clean decisions, deterministic reports and no-skip enforcement (6)
 test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
 test/logs_cli.test.mjs  saved-log filters, export and validation (2)

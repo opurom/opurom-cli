@@ -21,6 +21,7 @@ const GATES = Object.freeze([
   ['fuzz-input-corpus-contract', 'opurom.fuzz-input-corpus-contract/v1'],
   ['stability-resource-contract', 'opurom.stability-resource-contract/v1'],
   ['report-archive-integrity-contract', 'opurom.report-archive-integrity-contract/v1'],
+  ['flutter-provenance-contract', 'opurom.flutter-provenance-contract/v1'],
 ]);
 
 const gates = GATES.map(([name, schema]) => {

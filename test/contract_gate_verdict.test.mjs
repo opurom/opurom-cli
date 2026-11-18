@@ -32,7 +32,7 @@ test('the verdict aggregates every contract gate into one PASS document', () => 
   assert.equal(run.json.schema, 'opurom.contract-gate-verdict/v1');
   assert.equal(run.json.status, 'PASS');
   assert.equal(run.json.flutter.version, '3.50.0');
-  assert.equal(run.json.summary.total, 8);
+  assert.equal(run.json.summary.total, 9);
   assert.equal(run.json.summary.fail, 0);
   assert.deepEqual(run.json.gates.map((gate) => gate.name), [
     'performance-phase-contract',
@@ -43,6 +43,7 @@ test('the verdict aggregates every contract gate into one PASS document', () => 
     'fuzz-input-corpus-contract',
     'stability-resource-contract',
     'report-archive-integrity-contract',
+    'flutter-provenance-contract',
   ]);
   assert.ok(run.json.gates.every((gate) => gate.status === 'PASS' && gate.exitCode === 0));
 });
