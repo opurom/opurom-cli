@@ -79,6 +79,19 @@ test('a cross-font comparison is N/A even when a diff percent is supplied', () =
   assert.match(result.reason, /cross-font/);
 });
 
+test('max_err is reported on every branch and never gates', () => {
+  const rows = [
+    classifyPixelDiff({ diffPercent: 1, scriptClass: 'latin', sameFont: true, maxError: 255 }),
+    classifyPixelDiff({ diffPercent: 50, scriptClass: 'latin', sameFont: true, maxError: 255 }),
+    classifyPixelDiff({ diffPercent: 1, sameFont: false, maxError: 255 }),
+    classifyPixelDiff({ sameFont: true, maxError: 255 }),
+  ];
+  for (const row of rows) {
+    assert.equal(row.maxErrorGated, false, JSON.stringify(row));
+    assert.equal(row.maxError, 255);
+  }
+});
+
 test('an invalid comparator result fails rather than passing', () => {
   const missing = classifyPixelDiff({ sameFont: true });
   assert.equal(missing.status, 'FAIL');

@@ -81,3 +81,19 @@ test('the coverage run reports a measurable total for the repository', () => {
   assert.ok(report.all.line >= 0);
   assert.ok(report.files.some((file) => file.file.endsWith('sample.mjs')));
 });
+
+test('an invalid threshold fails closed', () => {
+  const report = parseCoverageReport(SPEC_REPORT);
+  for (const min of [NaN, -1, 101, '80']) {
+    const decision = coverageDecision({ report, min });
+    assert.equal(decision.status, 'FAIL', `threshold ${String(min)} passed`);
+    assert.match(decision.reason, /invalid coverage threshold/);
+  }
+});
+
+test('the failure reason names the scoped gate when only the scope regressed', () => {
+  const report = parseCoverageReport(SPEC_REPORT);
+  const decision = coverageDecision({ report, min: 84, scope: 'opurom' });
+  assert.equal(decision.status, 'FAIL');
+  assert.match(decision.reason, /scoped coverage/);
+});
