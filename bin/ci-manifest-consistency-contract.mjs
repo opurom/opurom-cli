@@ -41,10 +41,13 @@ check('workflow matrix declares an ordered check list', () => {
   assert.ok(matrix.length >= 5, `too few workflow checks: ${matrix.length}`);
 });
 
-check('every manifest check is dispatched', () => {
+check('every manifest check is dispatched exactly once', () => {
   dispatched = [...dispatcher.matchAll(/name === '([^']+)'/g)].map((match) => match[1]);
+  const duplicates = dispatched.filter((name, index) => dispatched.indexOf(name) !== index);
+  assert.deepEqual(duplicates, [], `duplicate dispatcher branches: ${duplicates.join(', ')}`);
   for (const name of manifest.checks ?? []) {
-    assert.ok(dispatched.includes(name), `${name} missing from ci-check.mjs dispatcher`);
+    assert.equal(dispatched.filter((entry) => entry === name).length, 1,
+      `${name} must have exactly one ci-check.mjs dispatcher branch`);
   }
 });
 

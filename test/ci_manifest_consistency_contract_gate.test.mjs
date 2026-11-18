@@ -68,3 +68,39 @@ test('the CI manifest gate fails closed when a manifest check is missing', () =>
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+
+test('duplicate dispatcher branches fail closed', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'opurom-dispatcher-gate-'));
+  try {
+    const bin = path.join(dir, 'bin');
+    const scripts = path.join(dir, '.github', 'scripts');
+    mkdirSync(bin, { recursive: true });
+    mkdirSync(scripts, { recursive: true });
+    mkdirSync(path.join(dir, '.github', 'workflows'), { recursive: true });
+    const gate = readFileSync(GATE, 'utf8')
+      .replace("const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');",
+        `const ROOT = ${JSON.stringify(dir)};`);
+    const file = path.join(bin, 'ci-manifest-consistency-contract.mjs');
+    writeFileSync(file, gate);
+    const dispatcher = readFileSync(path.join(ROOT, '.github', 'scripts', 'ci-check.mjs'), 'utf8');
+    const duplicated = dispatcher.replace("} else if (name === 'node-test') {",
+      "} else if (name === 'node-test') {\n} else if (name === 'node-test') {");
+    writeFileSync(path.join(scripts, 'ci-check.mjs'), duplicated);
+    writeFileSync(path.join(dir, '.github', 'workflows', 'ci.yml'),
+      readFileSync(path.join(ROOT, '.github', 'workflows', 'ci.yml'), 'utf8'));
+    writeFileSync(path.join(dir, '.github', 'opurom.json'),
+      readFileSync(path.join(ROOT, '.github', 'opurom.json'), 'utf8'));
+    const run = spawnSync(process.execPath, [file], {
+      cwd: dir,
+      encoding: 'utf8',
+      env: { ...process.env, NODE_V8_COVERAGE: '' },
+    });
+    assert.equal(run.status, 1);
+    const json = JSON.parse(run.stdout);
+    assert.equal(json.status, 'FAIL');
+    assert.ok(json.checks.some((row) => row.status === 'FAIL' && /duplicate dispatcher/.test(row.error ?? '')));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
