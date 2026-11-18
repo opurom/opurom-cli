@@ -30,6 +30,7 @@ const GATES = Object.freeze([
   ['contract-schema-consistency', 'opurom.contract-schema-consistency/v1'],
   ['deterministic-evidence-contract', 'opurom.deterministic-evidence-contract/v1'],
   ['ci-self-healing-contract', 'opurom.ci-self-healing-contract/v1'],
+  ['gate-replay-stability', 'opurom.gate-replay-stability/v1'],
 ]);
 
 mkdirSync(OUT, { recursive: true });

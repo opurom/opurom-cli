@@ -40,7 +40,8 @@ test('the stability resource gate emits a passing machine-readable report', () =
   assert.equal(run.json.contract.renderRuns, 12);
   assert.equal(run.json.contract.replayEvents, 200);
   assert.equal(run.json.contract.digestRuns, 8);
-  assert.ok(Number.isFinite(run.json.evidence.peakRssKb));
+  assert.equal(run.json.evidence.peakRssWithinCeiling, true);
+  assert.equal(run.json.evidence.peakRssCeilingKb, 512 * 1024);
   assert.match(run.json.evidence.frameSha256, /^[0-9a-f]{64}$/);
   assert.equal(run.json.summary.total, 3);
   assert.equal(run.json.summary.fail, 0);

@@ -23,6 +23,7 @@
     "flutter-provenance-contract",
     "provenance-citation-consistency",
     "contract-schema-consistency",
-    "deterministic-evidence-contract"
+    "deterministic-evidence-contract",
+    "gate-replay-stability"
   ]
 }
