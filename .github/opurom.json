@@ -14,6 +14,7 @@
     "gesture-timing-contract",
     "cross-target-artifact-contract",
     "fuzz-input-corpus-contract",
-    "stability-resource-contract"
+    "stability-resource-contract",
+    "report-archive-integrity-contract"
   ]
 }
