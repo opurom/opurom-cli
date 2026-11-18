@@ -59,14 +59,14 @@ jobs:
               for repo in opurom-examples opurom-core opurom-lang opurom-render opurom-debug opurom-pkg opurom-web; do
                 git clone --depth 1 "https://github.com/opurom/${repo}.git" "$repo"
               done
-              # The provenance gate checks cited Flutter file:line anchors
-              # against the pinned authoritative framework checkout.
-              if [ "${{ matrix.check }}" = "flutter-provenance-contract" ]; then
-                git clone --filter=blob:none --no-checkout \
-                  "https://github.com/flutter/flutter.git" flutter-golden
-                git -C flutter-golden checkout --detach \
-                  ab2912035e160d9cad6306df307576da6128ebdb
-              fi
+              # Source/provenance gates in this matrix read cited Flutter
+              # file:line anchors; always provide the pinned authoritative
+              # framework tree so nested gates and the full node-test suite
+              # resolve the same source layout.
+              git clone --filter=blob:none --no-checkout \
+                "https://github.com/flutter/flutter.git" flutter-golden
+              git -C flutter-golden checkout --detach \
+                ab2912035e160d9cad6306df307576da6128ebdb
               ;;
             opurom-lang)
               for repo in opurom-render opurom-examples; do
