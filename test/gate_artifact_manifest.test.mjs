@@ -28,7 +28,7 @@ test('the artifact manifest archives every gate with a content hash', () => {
     assert.equal(run.status, 0);
     assert.equal(run.json.schema, 'opurom.gate-artifact-manifest/v1');
     assert.equal(run.json.status, 'PASS');
-    assert.equal(run.json.summary.total, 16);
+    assert.equal(run.json.summary.total, 17);
     assert.equal(run.json.summary.fail, 0);
     for (const artifact of run.json.artifacts) {
       assert.equal(artifact.status, 'PASS');

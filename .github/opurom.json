@@ -24,6 +24,7 @@
     "provenance-citation-consistency",
     "contract-schema-consistency",
     "deterministic-evidence-contract",
-    "gate-replay-stability"
+    "gate-replay-stability",
+    "evidence-bounds-contract"
   ]
 }
