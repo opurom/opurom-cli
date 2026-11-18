@@ -10,6 +10,7 @@
     "coverage-gate",
     "performance-phase-contract",
     "test-scheduling-contract",
-    "golden-failure-contract"
+    "golden-failure-contract",
+    "gesture-timing-contract"
   ]
 }
