@@ -20,6 +20,7 @@
     "ci-manifest-consistency-contract",
     "gate-artifact-manifest",
     "ci-self-healing-contract",
-    "flutter-provenance-contract"
+    "flutter-provenance-contract",
+    "provenance-citation-consistency"
   ]
 }

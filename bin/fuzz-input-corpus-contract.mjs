@@ -7,7 +7,7 @@
 // - packages/flutter_test/lib/src/binding.dart:1070/2295/2800 defines the
 //   automated/binding test shape; each case is isolated and failures are
 //   reported instead of aborting the whole suite.
-// - _goldens_io.dart:225-251 applies the same strict fail-closed discipline to
+// - _goldens_io.dart:176-214 applies the same strict fail-closed discipline to
 //   every compared pixel.
 //
 // Exit 0 only when all checks pass; every run prints one JSON document.
@@ -163,7 +163,7 @@ const report = {
     goldenCommit: 'ab2912035e160d9cad6306df307576da6128ebdb',
     authority: [
       'packages/flutter_test/lib/src/binding.dart:1070/2295/2800',
-      'packages/flutter_test/lib/src/_goldens_io.dart:225-251',
+      'packages/flutter_test/lib/src/_goldens_io.dart:176-214',
     ],
   },
   contract: {

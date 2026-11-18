@@ -81,6 +81,8 @@ if (name === 'rust-test') {
   run('node', ['bin/ci-self-healing-contract.mjs']);
 } else if (name === 'flutter-provenance-contract') {
   run('node', ['bin/flutter-provenance-contract.mjs']);
+} else if (name === 'provenance-citation-consistency') {
+  run('node', ['bin/provenance-citation-consistency.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }

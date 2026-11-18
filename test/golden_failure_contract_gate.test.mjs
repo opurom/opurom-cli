@@ -1,7 +1,7 @@
 // Tests for the machine-readable golden failure-output contract gate.
 // Flutter authority: 3.50.0 / ab2912035e,
 // packages/flutter_test/lib/src/goldens.dart:118-119/258-273,
-// packages/flutter_test/lib/src/_goldens_io.dart:141-164/185/225-251/255-259,
+// packages/flutter_test/lib/src/_goldens_io.dart:141-164/176-214/255-260,
 // packages/flutter_test/lib/src/matchers.dart:589.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

@@ -37,8 +37,8 @@ test('the provenance gate verifies the pinned local Flutter tree and citations',
   assert.equal(run.json.flutter.version, '3.50.0');
   assert.equal(run.json.flutter.goldenCommit, 'ab2912035e160d9cad6306df307576da6128ebdb');
   assert.equal(run.json.flutter.engineCommit, '371f77202a73e8dff57a8b3bff75bca55c090aee');
-  assert.equal(run.json.contract.citationCount, 18);
-  assert.equal(run.json.summary.total, 19);
+  assert.equal(run.json.contract.citationCount, 28);
+  assert.equal(run.json.summary.total, 29);
   assert.equal(run.json.summary.fail, 0);
   assert.ok(run.json.checks.every((row) => row.status === 'PASS'));
 });

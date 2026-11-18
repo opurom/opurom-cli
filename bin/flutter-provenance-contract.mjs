@@ -96,6 +96,47 @@ const CITATIONS = Object.freeze([
     file: 'dev/benchmarks/macrobenchmarks/test_driver/util.dart', from: 38, to: 70,
     needle: 'macroPerfTest', label: 'repeated real-frame benchmark',
   },
+  {
+    file: 'packages/flutter_test/lib/src/goldens.dart', from: 133, to: 189,
+    needle: 'result.passed || result.diffPercent <= _precisionTolerance',
+    label: 'custom comparator tolerance',
+  },
+  {
+    file: 'packages/flutter_test/lib/src/_goldens_io.dart', from: 118, to: 129,
+    needle: 'getGoldenBytes', label: 'missing golden failure path',
+  },
+  {
+    file: 'packages/flutter_test/lib/src/_goldens_io.dart', from: 176, to: 214,
+    needle: 'Future<ComparisonResult> compare', label: 'strict pixel comparator',
+  },
+  {
+    file: 'packages/flutter_test/lib/src/binding.dart', from: 1070, to: 1070,
+    needle: 'abstract class TestWidgetsFlutterBinding', label: 'base test binding',
+  },
+  {
+    file: 'packages/flutter_test/lib/src/binding.dart', from: 2295, to: 2295,
+    needle: 'class AutomatedTestWidgetsFlutterBinding', label: 'automated binding',
+  },
+  {
+    file: 'packages/flutter_test/lib/src/binding.dart', from: 2800, to: 2800,
+    needle: 'class LiveTestWidgetsFlutterBinding', label: 'live/debug binding',
+  },
+  {
+    file: 'packages/flutter/lib/src/gestures/constants.dart', from: 49, to: 49,
+    needle: 'kDoubleTapSlop = 100.0', label: 'double-tap slop 100px',
+  },
+  {
+    file: 'packages/flutter/lib/src/gestures/constants.dart', from: 90, to: 90,
+    needle: 'kMinFlingVelocity = 50.0', label: 'minimum fling velocity',
+  },
+  {
+    file: 'packages/flutter/lib/src/gestures/constants.dart', from: 95, to: 95,
+    needle: 'kMaxFlingVelocity = 8000.0', label: 'maximum fling velocity',
+  },
+  {
+    file: 'dev/devicelab/lib/framework/task_result.dart', from: 132, to: 132,
+    needle: 'Map<String, dynamic> toJson()', label: 'task result JSON schema',
+  },
 ]);
 
 function gitHead(dir) {

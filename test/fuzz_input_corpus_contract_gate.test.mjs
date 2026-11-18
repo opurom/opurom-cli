@@ -1,7 +1,7 @@
 // Tests for the machine-readable fuzz input-corpus contract gate.
 // Flutter authority: 3.50.0 / ab2912035e,
 // packages/flutter_test/lib/src/binding.dart:1070/2295/2800 and
-// packages/flutter_test/lib/src/_goldens_io.dart:225-251.
+// packages/flutter_test/lib/src/_goldens_io.dart:176-214.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

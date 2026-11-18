@@ -7,7 +7,7 @@
 // - packages/flutter_test/lib/src/goldens.dart:118-119 — default comparison is
 //   exact; :258-273 defines passed/error/diffPercent/diffs.
 // - packages/flutter_test/lib/src/_goldens_io.dart:141-164 — mismatch output
-//   names the golden and writes one PNG per diff key; :185/225-251 strict
+//   names the golden and writes one PNG per diff key; :176-214 strict
 //   pixel comparator; :255-259 prints `diffPercent * 100`.
 // - packages/flutter_test/lib/src/matchers.dart:589 — golden matcher entry.
 //
@@ -85,7 +85,7 @@ const report = {
     goldenCommit: 'ab2912035e160d9cad6306df307576da6128ebdb',
     authority: [
       'packages/flutter_test/lib/src/goldens.dart:118-119/258-273',
-      'packages/flutter_test/lib/src/_goldens_io.dart:141-164/185/225-251/255-259',
+      'packages/flutter_test/lib/src/_goldens_io.dart:141-164/176-214/255-260',
       'packages/flutter_test/lib/src/matchers.dart:589',
     ],
   },
