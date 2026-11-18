@@ -1,7 +1,7 @@
 // Tests for the Flutter source provenance contract gate.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -21,7 +21,15 @@ function runGate(env = {}) {
   return { status: run.status, json };
 }
 
-test('the provenance gate verifies the pinned local Flutter tree and citations', () => {
+const LOCAL_FLUTTER = process.env.OPUROM_FLUTTER_SRC
+  ?? path.join(ROOT, '..', 'flutter-golden')
+  ?? null;
+
+test('the provenance gate verifies the pinned local Flutter tree and citations', {
+  // CI checks out Flutter only in the dedicated provenance job. The whole
+  // node-test matrix still runs the fail-closed drift test below.
+  skip: !existsSync(path.join(LOCAL_FLUTTER, 'packages', 'flutter_test', 'lib', 'src', 'binding.dart')),
+}, () => {
   const run = runGate();
   assert.equal(run.status, 0);
   assert.equal(run.json.schema, 'opurom.flutter-provenance-contract/v1');
