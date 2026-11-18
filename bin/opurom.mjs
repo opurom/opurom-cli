@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import fs, { readFileSync } from 'node:fs';
 import { flagEnabled, parseArgs, parsePort, requireFlags } from '../lib/args.mjs';
 import {
   buildEnvironmentArgs, buildInfoFor, configCommand, createLogRing, environmentProcessEnv,
@@ -9,6 +9,7 @@ import {
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { analyze } from '../lib/analyze.mjs';
 import { pub } from '../lib/pub.mjs';
+import { formatPluginReport, PLUGIN_REPORT_SCHEMA, readPluginIndex, resolvePlugins } from '../lib/plugin_market.mjs';
 import { perfCompare } from '../lib/perf_compare.mjs';
 import { modePlan } from '../lib/build_mode.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
@@ -46,6 +47,9 @@ Commands:
   targets                         list the IR emitters
   pub <subcommand> [arguments...]  forward dependency commands to opurom-pkg
                                   (get/upgrade/add/remove/outdated/deps/...)
+  plugin check <manifest.json> --index <index.json> [--dev] [--out <file>]
+                                  validate plugin metadata and resolve one
+                                  version per dependency from an offline index
   init --list
                                   list starter templates
   init <dir> [--template <name>]
@@ -149,7 +153,7 @@ async function main(argv) {
     'fail-fast', 'update-goldens', 'optimize', 'minify', 'tree-shake', 'sourcemap',
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
     'level', 'source', 'q', 'format', 'since', 'limit', 'write', 'panels',
-    'baseline', 'current', 'threshold', 'key',
+    'baseline', 'current', 'threshold', 'key', 'index', 'dev',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
@@ -239,6 +243,26 @@ async function main(argv) {
     case 'pub': {
       const { code } = pub({ argv: process.argv.slice(3) });
       return code;
+    }
+    case 'plugin': {
+      if (positionals[1] !== 'check') throw new Error('usage: plugin check <manifest.json> --index <index.json>');
+      const manifestFile = positionals[2];
+      if (!manifestFile) throw new Error('usage: plugin check <manifest.json> --index <index.json>');
+      const indexFile = requireFlags(flags, ['index']).index;
+      const manifest = JSON.parse(readFileSync(path.resolve(manifestFile), 'utf8'));
+      const index = readPluginIndex(indexFile);
+      if (index.errors.length) {
+        console.log(formatPluginReport({
+          schema: PLUGIN_REPORT_SCHEMA, status: 'FAIL', manifest: null,
+          index: index.file, errors: index.errors, rows: [],
+        }));
+        return 1;
+      }
+      const report = resolvePlugins({ manifest, index, includeDev: flagEnabled(flags, 'dev') });
+      const text = `${JSON.stringify(report, null, 2)}\n`;
+      if (typeof flags.out === 'string') fs.writeFileSync(path.resolve(flags.out), text);
+      console.log(text);
+      return report.status === 'FAIL' ? 1 : 0;
     }
     case 'targets':
       for (const name of targetsFromBuiltins()) console.log(name);
