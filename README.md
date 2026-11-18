@@ -28,7 +28,7 @@ your shell and no npm packages are fetched.
 | Global `--mode <debug\|profile\|release>` | Flutter `BuildMode` parity (3.50-candidate.0). `BuildMode=<mode>` becomes a compile-time define for `check`/`build`/`dev`; `TargetFile` is added for `build`. Reserved define keys (`BuildMode`, `TargetPlatform`, `TargetFile`, `DartDefines`) cannot be supplied by users. |
 | Global `--dart-define KEY=VALUE` / `--dart-define-from-file <file>` | Compile-time constants, repeated flags allowed. Files may be JSON objects or `.env` lines (single/double/back quotes with trailing comments; multiline values rejected), merged in the order given before command-line defines. |
 | `logs [<file>...] [--level trace\|info\|warn\|error] [--source <s>] [--q <text>] [--format json\|ndjson\|text] [--out <file>]` | Reads/export Opurom dev-log records from saved files (or the live default dev server). Follows Flutter's `trace/info/warn/error` logger levels (`logger.dart:29-64,68-260`); filters are deterministic and `--out` writes the exact exported bytes. |
-| `devtools [<url>] [--json]` | Prints DevTools session discovery from a running `opurom dev` server (default `:5178`): host/port, inspector URL, live IR/frames/memory/network/event/logs/exit URLs, DAP adapter path and active environment/mode. This is the Opurom counterpart of Flutter's `devtools.serve` daemon method; it never invents a VM Service. |
+| `devtools [<url>] [--json] [--panels]` | Prints DevTools session discovery from a running `opurom dev` server (default `:5178`): host/port, inspector URL, live IR/frames/memory/network/event/logs/exit URLs, DAP adapter path and active environment/mode. With `--panels`, aggregates the four read-only data-plane views into a deterministic `opurom.devtools-panels/v1` snapshot with explicit availability/reason badges. This is the Opurom counterpart of Flutter's `devtools.serve` daemon method; it never invents a VM Service. |
 | `targets` | Prints the emitter names read from `the framework rules`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the framework rules). |
 | `init --list` | Prints every starter template name, one per line, in stable alphabetical order. |
 | `init <dir> [--template <name>]` | Scaffolds `opurom.json` (name + targets), a starter screen, `README.md`, `.gitignore`, a 128x128 `logo.png`, its derived `favicon.ico` and an `index.html` favicon link. The image bytes are embedded in `lib/init.mjs`, so scaffolding needs no umbrella checkout. `blank` is a minimal screen, `dashboard` adds themed UI and interaction, `fullstack` declares a model and API; `counter`, `particles` and `project` remain available. Refuses to overwrite a non-empty directory. An unknown name is a clear error. |
@@ -1222,6 +1222,7 @@ bin/opurom.mjs        dispatcher (shebang, executable)
 bin/sync-hub.mjs      standalone loopback RFC 6455 sync hub helper
 lib/args.mjs          parseArgs / requireFlags / parsePort / flagEnabled
 lib/config.mjs        Flutter-style settings, XDG path, .env/JSON defines, build info
+lib/devtools_panels.mjs aggregate frames/memory/network/logs views with availability badges
 lib/analyze.mjs       project source discovery + per-file quality gate and reports
 lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
@@ -1261,10 +1262,11 @@ test/frame_profile.test.mjs  injected samples, schema, validation and real rende
 test/doctor.test.mjs   toolchain report tests (3)
 test/config.test.mjs   settings, .env/JSON merge order, build modes and CLI flags (9)
 test/devtools-session.test.mjs  DevTools session discovery and CLI (3)
+test/devtools_panels.test.mjs  aggregated panel schema, versions and fetch failures (4)
 test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
 test/logs_cli.test.mjs  saved-log filters, export and validation (2)
 test/analyze.test.mjs  source discovery, per-file rows, machine output, exit codes (4)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (285 tests)
+test/*.test.mjs       node:test unit suite (289 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```

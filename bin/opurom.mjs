@@ -96,8 +96,9 @@ Commands:
                                   (default :5178): state snapshot + recent
                                   events, --tree for the live IR widget tree,
                                   --digest for the golden digest + node diff
-  devtools [<url>] [--json]       show DevTools session discovery from a running
-                                  "opurom dev" server (default :5178)
+  devtools [<url>] [--json] [--panels]
+                                  show DevTools session discovery and, with
+                                  --panels, the frames/memory/network/logs views
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [-j N] [--verbose] [--fail-fast]
@@ -141,7 +142,7 @@ async function main(argv) {
     'digest', 'dev', 'widget', 'examples', 'filter', 'jobs', 'concurrency', 'verbose',
     'fail-fast', 'update-goldens', 'optimize', 'minify', 'tree-shake', 'sourcemap',
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
-    'level', 'source', 'q', 'format', 'since', 'limit', 'write',
+    'level', 'source', 'q', 'format', 'since', 'limit', 'write', 'panels',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
@@ -411,7 +412,9 @@ async function main(argv) {
     case 'devtools': {
       const url = positionals[1];
       if (url && flags.tree) throw new Error('usage: devtools [<url>] [--json]');
-      return await inspectDevtools({ url, json: flagEnabled(flags, 'json') });
+      return await inspectDevtools({
+        url, json: flagEnabled(flags, 'json'), panels: flagEnabled(flags, 'panels'),
+      });
     }
     case 'examples':
       await examplesList();
