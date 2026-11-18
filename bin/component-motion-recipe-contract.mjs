@@ -41,20 +41,9 @@ function renderSource(relative) {
     encoding: 'utf8',
     timeout: 30 * 1000,
   });
-  if (run.status === 0) return run.stdout;
-  const fetched = spawnSync('git', ['fetch', 'origin', RENDER_REF.replace('origin/', ''), '--quiet'], {
-    cwd: RENDER_ROOT,
-    encoding: 'utf8',
-    timeout: 5 * 60 * 1000,
-  });
-  const retry = spawnSync('git', ['show', `${RENDER_REF}:${relative}`], {
-    cwd: RENDER_ROOT,
-    encoding: 'utf8',
-    timeout: 30 * 1000,
-  });
-  assert.equal(retry.status, 0,
-    `missing authoritative source ${RENDER_REF}:${relative} (fetch status ${fetched.status})`);
-  return retry.stdout;
+  assert.equal(run.status, 0,
+    `missing authoritative source ${RENDER_REF}:${relative}: ${run.stderr}`);
+  return run.stdout;
 }
 
 let quality;

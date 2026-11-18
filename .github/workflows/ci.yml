@@ -67,9 +67,8 @@ jobs:
                 "https://github.com/flutter/flutter.git" flutter-golden
               git -C flutter-golden checkout --detach \
                 ab2912035e160d9cad6306df307576da6128ebdb
-              git -C opurom-render fetch --depth 1 origin render/visual-gate-contract
-              git -C opurom-render fetch --depth 1 origin render/component-recipe-contract
-              git -C opurom-render fetch --depth 1 origin render/motion-spec-contract
+              git -C opurom-render fetch --depth 1 origin \
+                render/visual-gate-contract:refs/remotes/origin/render/visual-gate-contract
               ;;
             opurom-lang)
               for repo in opurom-render opurom-examples; do
