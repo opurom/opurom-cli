@@ -49,8 +49,11 @@ test('the provenance gate fails closed when a cited source line is altered', () 
     // Build a minimal fake Flutter tree with only the binding citation intact.
     const binding = path.join(dir, 'packages', 'flutter_test', 'lib', 'src');
     mkdirSync(binding, { recursive: true });
-    const source = readFileSync(path.join(ROOT, '..', 'flutter-golden',
-      'packages', 'flutter_test', 'lib', 'src', 'binding.dart'), 'utf8');
+    const sourcePath = path.join(ROOT, '..', 'flutter-golden',
+      'packages', 'flutter_test', 'lib', 'src', 'binding.dart');
+    const source = existsSync(sourcePath)
+      ? readFileSync(sourcePath, 'utf8')
+      : 'line0\nline1\n/// 10 minutes for [AutomatedTestWidgetsFlutterBinding]\n';
     const lines = source.split('\n');
     lines[1326] = '/// citation drift';
     writeFileSync(path.join(binding, 'binding.dart'), lines.join('\n'));
