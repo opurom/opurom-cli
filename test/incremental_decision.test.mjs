@@ -54,6 +54,8 @@ test('real incremental builds emit a stable decision report without skipping wor
     assert.equal(firstReport.schema, INCREMENTAL_DECISION_SCHEMA);
     assert.equal(firstReport.dirty.length, 1);
     assert.deepEqual(firstReport.executedSteps, firstReport.steps.map((row) => row.step));
+    assert.ok(firstReport.steps.some((row) => row.step === 'postprocess'),
+      'the default release build must include product post-processing');
 
     const second = run(process.execPath, args, { timeout: 120000 });
     assert.equal(second.status, 0, second.stderr);
@@ -113,6 +115,8 @@ test('fixed source-change sequence yields byte-identical report fields', () => {
     assert.deepEqual(report.dirty, [source]);
     assert.deepEqual(report.skipped, []);
     assert.ok(report.executedSteps.every((step, index) => step === report.steps[index].step));
+    assert.ok(report.steps.some((row) => row.step === 'postprocess'),
+      'the default release build must include product post-processing');
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }

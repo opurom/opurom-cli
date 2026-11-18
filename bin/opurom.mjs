@@ -127,7 +127,7 @@ Run "node bin/opurom.mjs <command> --help" for the same summary.
 
 Global build options (check/build/dev/serve):
   --env <name>                    select a configured environment (default/dev/test/prod)
-  --mode <debug|profile|release>  build mode (Flutter BuildMode parity, default debug)
+  --mode <debug|profile|release>  build mode (Flutter BuildMode parity, default release)
   --dart-define KEY=VALUE         compile-time value; repeats allowed, highest precedence
   --dart-define-from-file <file>  JSON or .env value file; repeats allowed, merged in order
 

@@ -205,8 +205,8 @@ test('--dart-define parsing rejects malformed entries and keeps equals in values
 
 test('build modes match Flutter BuildMode cliName and reserve defines', () => {
   assert.deepEqual(BUILD_MODES, ['debug', 'profile', 'release']);
-  assert.equal(parseBuildMode(undefined), 'debug');
-  assert.equal(parseBuildMode(true), 'debug');
+  assert.equal(parseBuildMode(undefined), 'release');
+  assert.equal(parseBuildMode(true), 'release');
   assert.equal(parseBuildMode('release'), 'release');
   assert.throws(() => parseBuildMode('jit-release'), /invalid --mode/);
   const info = buildInfoFor({
