@@ -40,6 +40,7 @@ your shell and no npm packages are fetched.
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build ... [--timings] [--timings-file <file>]` | Emits measured per-step build timings (`opurom.build-timings/v1`) on stdout and optionally to a JSON artifact. Each step records target, elapsed milliseconds, skipped and succeeded, mirroring Flutter `PerformanceMeasurement` (`build_system.dart:923,1016,1045-1057`); no number is inferred. |
 | `build ... [--incremental]` | Records source file marks in `.opurom-filecache.json` and reports dirty inputs using Flutter `FileStore` semantics (hash strategy, versioned cache, missing files dirty: `file_store.dart:65-83,88-110,162-230`). Artifacts stay byte-identical; the cache is an input-tracking artifact, not a runtime interpreter. |
+| `build ... --incremental` decision | Writes `.opurom-incremental/latest.json` (`opurom.incremental-decision/v1`) with normalized dirty inputs, per-step `run`/`would-skip` decisions, and the steps actually executed. This is observation only: every step still runs, so the policy can be proven stable before enforcement. Flutter authority: `build_system.dart:923-1016` (`PerformanceMeasurement.skipped`) and `file_store.dart:162-230` (dirty input invalidation). |
 | `build --project <dir> --target <name> --out <dir>` | Resolves `<dir>/main.opu` and its `import` declarations into one program, then runs the same compile-and-lower pipeline. Accepts every target and build flag from `--src`. Errors clearly when `main.opu` is absent. |
 | `build --src <src.opu> --target web-dom --out <dir>` | Responsive DOM build: the compiler delegates to the sibling `opurom-web` emitter, which writes a standalone `index.html` with a viewport meta tag and flex layout that reflows on browser resize. `web-dom` is a build target, not a 0.1.0 IR emitter, so `targets` and `opuromc targets` keep their existing lists. |
 | `build --src <src.opu> --target <name> --out <dir> --optimize` | Runs `opuromc optimize <ir> -o <optimized-ir>` before every emitter, prints measured input/output byte sizes and falls back to the original IR with an explicit message if the compiler cannot optimize. Default builds are unchanged. |
@@ -70,6 +71,7 @@ your shell and no npm packages are fetched.
 | `node bin/coverage.mjs` | Runs the Node suite with the built-in reporter and enforces 80% line coverage over files owned by this repository. Sibling modules loaded through subprocesses are reported separately and excluded from the denominator under the one-repo-one-owner rule. `OPUROM_COVERAGE_MIN` overrides the threshold. |
 | `node bin/performance-phase-contract.mjs` | Prints one `opurom.performance-phase-contract/v1` JSON document validating the DevTools `opurom.performance-profile/v1` phase order, attribution, nearest-rank p50/p95 and deterministic flame output against Flutter `engine/src/flutter/flow/frame_timings.h:35-42` (3.50.0). Exits 1 on any contract drift; this is a read-only quality gate over tool-dev's implementation. |
 | `node bin/test-scheduling-contract.mjs` | Prints one `opurom.test-scheduling-contract/v1` JSON document pinning Flutter's automated 10-minute default timeout and live/debug unlimited-timeout distinction (`packages/flutter_test/lib/src/binding.dart:1326-1329/2345-2347/1070/2295`) together with Opurom's fail-fast/SKIP accounting. Exits 1 on any contract drift. |
+| `node bin/golden-failure-contract.mjs` | Prints one `opurom.golden-failure-contract/v1` JSON document pinning the golden mismatch payload: exact default comparison, `ComparisonResult` fields, golden/error/diff-artifact output and Flutter's `diffPercent * 100` scale (`goldens.dart:118-119/258-273`, `_goldens_io.dart:141-164/185/225-251/255-259`, `matchers.dart:589`). Exits 1 on drift. |
 | `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
 | `test --report [--out <dir>] [--latest]` | Builds and archives a deterministic `opurom.test-report/v1` JSON report: source-provenance rows for unit/component/integration/gesture/pixel/performance gates, pinned Flutter 3.50 gesture and pixel thresholds, commit/branch tags, and PASS/FAIL/N/A counts. `--out` selects an archive directory; `--latest` prints the most recent archive. A real FAIL exits 1; a declared N/A never masquerades as PASS. |
 | `test --examples [--filter <name>] [--jobs N] [--verbose]` | Runs the registered example tests ctest-style: one `PASS` / `FAIL` / `SKIP` line per test, then `tests passed: X, failed: Y, skipped: Z, time N.Ns` and the failed test ids; exits 1 on any failure. Tests of one app run in registry order (render consumes the IR its compile test wrote); apps run in parallel, `--jobs` defaults to min(4, cpus). A missing source marked `required: false` is a SKIP with the reason; a missing `required: true` source is a FAIL. Commands use `{source}` / `{tmp}` placeholders and the `opuromc`, `opurom-render`, `node` tool aliases, so no machine-specific paths are stored in the registry. |
@@ -1243,6 +1245,7 @@ lib/perf_compare.mjs baseline/current performance score comparison
 lib/plugin_market.mjs plugin manifest schema, SemVer ranges, offline index
 lib/build_timings.mjs measured per-step build timing records
 lib/file_store.mjs versioned hash/timestamp input cache
+lib/incremental_decision.mjs observable dirty-input and step decisions
 lib/analyze.mjs       project source discovery + per-file quality gate and reports
 lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
@@ -1288,10 +1291,11 @@ test/perf_compare.test.mjs  score keys, regression gate, N/A and CLI artifacts (
 test/plugin_market.test.mjs  manifest schema, ranges, offline resolution and CLI (5)
 test/build_timings.test.mjs  timer contract, JSON artifact and real build (4)
 test/file_store.test.mjs  hash/timestamp marks, invalid cache, real incremental build (3)
+test/incremental_decision.test.mjs  dirty/clean decisions and no-skip enforcement (3)
 test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
 test/logs_cli.test.mjs  saved-log filters, export and validation (2)
 test/analyze.test.mjs  source discovery, per-file rows, machine output, exit codes (4)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (312 tests)
+test/*.test.mjs       node:test unit suite (315 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```
