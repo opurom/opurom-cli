@@ -130,3 +130,16 @@ test('Flutter fraction and human percent thresholds agree at the boundary', () =
   const small = classifyPixelDiff({ diffPercent: 0.0201, scriptClass: 'latin', sameFont: true });
   assert.equal(small.status, 'PASS');
 });
+
+test('a failed comparison reports the golden, error and diff artifact keys', () => {
+  const row = classifyPixelDiff({
+    diffPercent: 4, sameFont: true, scriptClass: 'latin', maxError: 255,
+    golden: 'gallery-home.png', diffArtifacts: ['masterImage', 'testImage', 'maskedDiff', 'isolatedDiff'],
+  });
+  assert.equal(row.status, 'FAIL');
+  assert.equal(row.golden, 'gallery-home.png');
+  assert.match(row.error, /Golden "gallery-home.png":/);
+  assert.match(row.error, /diff 4% exceeds 2%/);
+  assert.deepEqual(row.diffArtifacts, ['masterImage', 'testImage', 'maskedDiff', 'isolatedDiff']);
+  assert.equal(row.maxErrorGated, false);
+});
