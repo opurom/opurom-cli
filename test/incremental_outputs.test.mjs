@@ -13,7 +13,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { run } from '../lib/proc.mjs';
 import {
-  discoverOutputFiles, diffOutputMarks, OUTPUT_MARK_FILE, readOutputMarks, writeOutputMarks,
+  discoverOutputFiles, diffOutputMarks, OUTPUT_MARK_FILE, OUTPUT_MARK_VERSION,
+  readOutputMarks, writeOutputMarks,
 } from '../lib/incremental_outputs.mjs';
 
 const CLI = fileURLToPath(new URL('../bin/opurom.mjs', import.meta.url));
@@ -135,6 +136,130 @@ test('output marks leave default builds byte-identical', () => {
     }
     assert.ok(fs.existsSync(path.join(tracked, OUTPUT_MARK_FILE)));
     assert.ok(!fs.existsSync(path.join(plain, OUTPUT_MARK_FILE)));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+
+test('version and strategy transitions clear the prior output cache', () => {
+  const base = tempDir('output-cache-lifecycle-');
+  try {
+    fs.writeFileSync(path.join(base, 'index.html'), 'a');
+    const markFile = path.join(base, OUTPUT_MARK_FILE);
+    const valid = (version, strategy, marks) => JSON.stringify({
+      version, strategy, marks,
+    }, null, 2);
+
+    fs.writeFileSync(markFile, valid(OUTPUT_MARK_VERSION + 1, 'hash', { 'index.html': 'sha256:old' }));
+    const oldVersion = readOutputMarks(markFile);
+    assert.deepEqual(oldVersion, {});
+
+    fs.writeFileSync(markFile, valid(OUTPUT_MARK_VERSION, 'timestamp', { 'index.html': 'mtime:old' }));
+    const switched = readOutputMarks(markFile);
+    assert.deepEqual(switched, {});
+
+    const markFiles = writeOutputMarks(markFile, discoverOutputFiles(base));
+    assert.deepEqual(Object.keys(markFiles), ['index.html']);
+    assert.match(markFiles['index.html'], /^sha256:[0-9a-f]{64}$/);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('missing outputs are reported dirty and leave no .tmp remainder', () => {
+  const base = tempDir('output-cache-missing-');
+  try {
+    const markFile = path.join(base, OUTPUT_MARK_FILE);
+    fs.writeFileSync(path.join(base, 'index.html'), 'a');
+    const marks = writeOutputMarks(markFile, discoverOutputFiles(base));
+    assert.deepEqual(marks, { 'index.html': marks['index.html'] });
+
+    const previous = readOutputMarks(markFile);
+    fs.rmSync(path.join(base, 'index.html'));
+    assert.deepEqual(
+      diffOutputMarks(discoverOutputFiles(base), previous, base),
+      [],
+    );
+    writeOutputMarks(markFile, [], { previous });
+    assert.deepEqual(readOutputMarks(markFile), {});
+
+    fs.writeFileSync(path.join(base, 'index.html'), 'a');
+    assert.deepEqual(
+      diffOutputMarks(discoverOutputFiles(base), {}, base),
+      [path.join(base, 'index.html')],
+    );
+    const restored = writeOutputMarks(markFile, discoverOutputFiles(base));
+    assert.deepEqual(restored, { 'index.html': marks['index.html'] });
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('output cache persist replaces the file atomically and survives failure', () => {
+  const base = tempDir('output-cache-atomic-');
+  try {
+    const markFile = path.join(base, OUTPUT_MARK_FILE);
+    fs.writeFileSync(path.join(base, 'index.html'), 'a');
+    const original = `${JSON.stringify({ version: -1, strategy: 'hash', marks: {} }, null, 2)}\n`;
+    fs.writeFileSync(markFile, original);
+    const expected = writeOutputMarks(markFile, discoverOutputFiles(base));
+    fs.writeFileSync(markFile, original);
+
+    const renameSync = fs.renameSync;
+    const attempted = [];
+    fs.renameSync = (from, to) => {
+      attempted.push({ from, to });
+      assert.equal(fs.readFileSync(to, 'utf8'), original, 'old cache must remain intact until rename');
+      renameSync(from, `${from}.moved`);
+      throw new Error('simulated rename failure');
+    };
+    let failure = null;
+    try { writeOutputMarks(markFile, discoverOutputFiles(base)); }
+    catch (error) { failure = error; }
+    finally { fs.renameSync = renameSync; }
+
+    assert.match(failure?.message ?? '', /simulated rename failure/);
+    assert.equal(fs.readFileSync(markFile, 'utf8'), original, 'failed persist keeps the old cache');
+    assert.equal(attempted.length, 1);
+    assert.equal(fs.readdirSync(base).filter((name) => name.endsWith('.tmp')).length, 0);
+    assert.ok(fs.existsSync(`${attempted[0].from}.moved`));
+
+    writeOutputMarks(markFile, discoverOutputFiles(base));
+    assert.deepEqual(readOutputMarks(markFile), expected);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test('output cache replays produce stable bytes and observation-only decisions', () => {
+  const base = tempDir('output-cache-replay-');
+  try {
+    const source = path.resolve('../opurom-examples/golden/counter.opu');
+    const out = path.join(base, 'out');
+    const args = [
+      CLI, 'build', '--src', source, '--target', 'web-dom', '--out', out, '--incremental',
+    ];
+    const markFile = path.join(out, OUTPUT_MARK_FILE);
+    const decisionFile = path.join(out, '.opurom-incremental', 'latest.json');
+    const runBuild = () => {
+      const result = run(process.execPath, args, { timeout: 120000 });
+      assert.equal(result.status, 0, result.stderr);
+    };
+    runBuild();
+    runBuild();
+    const firstMarks = fs.readFileSync(markFile, 'utf8');
+    const firstDecision = fs.readFileSync(decisionFile, 'utf8');
+
+    for (let i = 0; i < 4; i++) runBuild();
+    assert.equal(fs.readFileSync(markFile, 'utf8'), firstMarks);
+    assert.equal(fs.readFileSync(decisionFile, 'utf8'), firstDecision);
+
+    const decision = JSON.parse(firstDecision);
+    assert.deepEqual(decision.dirty, []);
+    assert.equal(decision.enforcement, 'none');
+    assert.deepEqual(decision.skipped, decision.steps.map((row) => row.step));
+    assert.ok(decision.steps.every((row) => row.executed));
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
