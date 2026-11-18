@@ -17,6 +17,7 @@
     "stability-resource-contract",
     "report-archive-integrity-contract",
     "contract-gate-verdict",
-    "ci-manifest-consistency-contract"
+    "ci-manifest-consistency-contract",
+    "gate-artifact-manifest"
   ]
 }
