@@ -146,3 +146,72 @@ test('non-deterministic fields are rejected from the report serializer', () => {
     /non-deterministic incremental report field: generatedAt/,
   );
 });
+
+test('multi-input dirty lists stay deterministic across import changes', () => {
+  const base = tmpDir('incremental-multi-');
+  try {
+    const app = path.join(base, 'app');
+    fs.mkdirSync(path.join(app, 'models'), { recursive: true });
+    fs.mkdirSync(path.join(app, 'theme'), { recursive: true });
+    const program = (label) => [
+      'import "models/a.opu"',
+      'import "models/b.opu"',
+      '',
+      'app A {',
+      `  Column { Text("${label}") }`,
+      '  theme {',
+      '    tokens {',
+      '      import "theme/tokens.json"',
+      '    }',
+      '  }',
+      '}',
+    ].join('\n');
+    fs.writeFileSync(path.join(app, 'main.opu'), program('a'));
+    fs.writeFileSync(path.join(app, 'models', 'a.opu'), 'state a = 1\n');
+    fs.writeFileSync(path.join(app, 'models', 'b.opu'), 'state b = 2\n');
+    fs.writeFileSync(path.join(app, 'theme', 'tokens.json'), JSON.stringify({ 'md-accent': '#111111' }));
+    const out = path.join(base, 'out');
+    const args = [
+      CLI, 'build', '--project', app, '--target', 'web-dom', '--out', out, '--incremental',
+    ];
+    const decisionFile = path.join(out, '.opurom-incremental', 'latest.json');
+    const build = () => {
+      const result = run(process.execPath, args, { timeout: 120000 });
+      assert.equal(result.status, 0, result.stderr);
+      return JSON.parse(fs.readFileSync(decisionFile, 'utf8'));
+    };
+
+    let report = build();
+    assert.deepEqual(report.dirty, [
+      path.join(app, 'main.opu'),
+      path.join(app, 'models', 'a.opu'),
+      path.join(app, 'models', 'b.opu'),
+      path.join(app, 'theme', 'tokens.json'),
+    ]);
+    assert.deepEqual(report.skipped, []);
+    report = build();
+    assert.deepEqual(report.dirty, []);
+    assert.deepEqual(report.skipped, report.steps.map((row) => row.step));
+    assert.ok(report.steps.every((row) => row.executed));
+
+    fs.writeFileSync(path.join(app, 'models', 'b.opu'), 'state b = 3\n');
+    report = build();
+    assert.deepEqual(report.dirty, [path.join(app, 'models', 'b.opu')]);
+    assert.deepEqual(report.skipped, []);
+
+    fs.writeFileSync(path.join(app, 'theme', 'tokens.json'), JSON.stringify({ 'md-accent': '#222222' }));
+    report = build();
+    assert.deepEqual(report.dirty, [path.join(app, 'theme', 'tokens.json')]);
+    assert.deepEqual(report.skipped, []);
+
+    fs.writeFileSync(path.join(app, 'models', 'b.opu'), 'state b = 3\n');
+    fs.writeFileSync(path.join(app, 'theme', 'tokens.json'), JSON.stringify({ 'md-accent': '#222222' }));
+    report = build();
+    assert.deepEqual(report.dirty, []);
+    assert.deepEqual(report.skipped, report.steps.map((row) => row.step));
+    assert.ok(report.steps.every((row) => row.executed));
+    assert.ok(fs.existsSync(path.join(out, 'index.html')));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});

@@ -228,3 +228,50 @@ test('incremental build cache survives missing and restored sources without skip
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+
+test('multi-input cache tracks imports and token JSON deterministically', () => {
+  const base = tmpDir('file-store-multi-');
+  try {
+    const app = path.join(base, 'app');
+    fs.mkdirSync(path.join(app, 'models'), { recursive: true });
+    fs.mkdirSync(path.join(app, 'theme'), { recursive: true });
+    fs.writeFileSync(path.join(app, 'main.opu'), [
+      'import "models/a.opu"',
+      'import "models/b.opu"',
+      '',
+      'app A { Column { Text("x") } }',
+      'theme { import "theme/tokens.json" }',
+    ].join('\n'));
+    fs.writeFileSync(path.join(app, 'models', 'a.opu'), 'state a = 1\n');
+    fs.writeFileSync(path.join(app, 'models', 'b.opu'), 'state b = 2\n');
+    fs.writeFileSync(path.join(app, 'theme', 'tokens.json'), JSON.stringify({ accent: '#111111' }));
+    const cache = path.join(base, FILE_STORE_NAME);
+    const store = createFileStore({ cacheFile: cache, root: app });
+    store.initialize();
+
+    const inputs = [
+      path.join(app, 'main.opu'),
+      path.join(app, 'models', 'a.opu'),
+      path.join(app, 'models', 'b.opu'),
+      path.join(app, 'theme', 'tokens.json'),
+    ];
+    assert.deepEqual(store.diff(inputs), inputs);
+    store.persist();
+    const afterFirst = JSON.parse(fs.readFileSync(cache, 'utf8'));
+    assert.deepEqual(Object.keys(afterFirst.marks).sort(), [
+      'main.opu', 'models/a.opu', 'models/b.opu', 'theme/tokens.json',
+    ]);
+
+    const next = createFileStore({ cacheFile: cache, root: app });
+    next.initialize();
+    assert.deepEqual(next.diff(inputs), []);
+    fs.writeFileSync(path.join(app, 'models', 'b.opu'), 'state b = 3\n');
+    assert.deepEqual(next.diff(inputs), [path.join(app, 'models', 'b.opu')]);
+    next.persist();
+    const afterChange = JSON.parse(fs.readFileSync(cache, 'utf8'));
+    assert.notEqual(afterChange.marks['models/b.opu'], afterFirst.marks['models/b.opu']);
+    assert.equal(afterChange.marks['models/a.opu'], afterFirst.marks['models/a.opu']);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
