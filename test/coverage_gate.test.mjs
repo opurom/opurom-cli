@@ -34,11 +34,11 @@ test('the spec and TAP reports parse to the same rows', () => {
   assert.equal(tap.files[0].file, 'opurom.mjs');
 });
 
-test('a report without a total row is a FAIL, not a silent pass', () => {
-  const report = parseCoverageReport('opurom.mjs | 90.00 | 90.00 | 90.00 |');
+test('a report without repository-owned rows is a FAIL, not a silent pass', () => {
+  const report = parseCoverageReport('.. | | | |\n sibling.mjs | 90.00 | 90.00 | 90.00 |');
   const decision = coverageDecision({ report, min: 80 });
   assert.equal(decision.status, 'FAIL');
-  assert.match(decision.reason, /no "all files" row/);
+  assert.match(decision.reason, /no repository-owned files/);
   assert.equal(decision.measured, null);
 });
 
@@ -46,7 +46,7 @@ test('the gate passes when the total coverage clears the threshold', () => {
   const report = parseCoverageReport(SPEC_REPORT);
   const decision = coverageDecision({ report, min: DEFAULT_MIN_LINE_PERCENT });
   assert.equal(decision.status, 'PASS');
-  assert.equal(decision.measured, 84.42);
+  assert.equal(decision.measured, 89.62, 'the gate averages repository-owned files');
   assert.equal(decision.reason, null);
 });
 
