@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [rust-test, rust-fmt, node-test, node-syntax, validate, coverage-gate, performance-phase-contract, test-scheduling-contract, golden-failure-contract, gesture-timing-contract]
+        check: [rust-test, rust-fmt, node-test, node-syntax, validate, coverage-gate, performance-phase-contract, test-scheduling-contract, golden-failure-contract, gesture-timing-contract, cross-target-artifact-contract]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
