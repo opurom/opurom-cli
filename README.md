@@ -23,6 +23,12 @@ your shell and no npm packages are fetched.
 | Command | What it does |
 | --- | --- |
 | `doctor` | Checks `rustc`, `cargo`, `node`, `opuromc`, `opurom-render` and the golden fixture; prints remediation hints and exits 1 if a required tool is missing. `opurom-core`, `opurom-platform` and the `opurom-gpu` binary behind `bench --compare` are reported as optional from a read-only scan, so two runs over the same workspace print the same rows. |
+| `config [--list] [--machine] [--key value ...]` | Reads and writes the user settings file in Flutter `config` style. `--list` prints all settings, `--machine` prints a merged JSON object (project overrides user settings), and `--key value` writes a value; `--key ''` removes it. File location: `$OPUR_CONFIG/settings.json` or `$XDG_CONFIG_HOME/opurom/settings.json`; project overrides live in `<project>/.opurom/settings.json`. Invalid JSON is discarded (matching Flutter `Config`), and a change prints the restart-editors hint. |
+| Global `--env <name>` | Selects a named environment for `check`, `build`, `dev` and `serve` (default `dev` when unset). Defines are merged, in increasing precedence: `.env.<name>` → `env/<name>.json` → `env/<name>.env` → `.env` → global `environments.<name>` settings → project `environments.<name>` settings → repeated `--dart-define KEY=VALUE`. The final values become `OPR_DEFINE_<KEY>` plus `OPR_ENV` for generated build services, and `Environment=<name>` is injected as a define. |
+| Global `--mode <debug\|profile\|release>` | Flutter `BuildMode` parity (3.50-candidate.0). `BuildMode=<mode>` becomes a compile-time define for `check`/`build`/`dev`; `TargetFile` is added for `build`. Reserved define keys (`BuildMode`, `TargetPlatform`, `TargetFile`, `DartDefines`) cannot be supplied by users. |
+| Global `--dart-define KEY=VALUE` / `--dart-define-from-file <file>` | Compile-time constants, repeated flags allowed. Files may be JSON objects or `.env` lines (single/double/back quotes with trailing comments; multiline values rejected), merged in the order given before command-line defines. |
+| `logs [<file>...] [--level trace\|info\|warn\|error] [--source <s>] [--q <text>] [--format json\|ndjson\|text] [--out <file>]` | Reads/export Opurom dev-log records from saved files (or the live default dev server). Follows Flutter's `trace/info/warn/error` logger levels (`logger.dart:29-64,68-260`); filters are deterministic and `--out` writes the exact exported bytes. |
+| `devtools [<url>] [--json]` | Prints DevTools session discovery from a running `opurom dev` server (default `:5178`): host/port, inspector URL, live IR/frames/memory/network/event/logs/exit URLs, DAP adapter path and active environment/mode. This is the Opurom counterpart of Flutter's `devtools.serve` daemon method; it never invents a VM Service. |
 | `targets` | Prints the emitter names read from `the framework rules`: `native web wechat alipay qq douyin baidu kuaishou` (plus `wasm` once the wasm emitter is in the framework rules). |
 | `init --list` | Prints every starter template name, one per line, in stable alphabetical order. |
 | `init <dir> [--template <name>]` | Scaffolds `opurom.json` (name + targets), a starter screen, `README.md`, `.gitignore`, a 128x128 `logo.png`, its derived `favicon.ico` and an `index.html` favicon link. The image bytes are embedded in `lib/init.mjs`, so scaffolding needs no umbrella checkout. `blank` is a minimal screen, `dashboard` adds themed UI and interaction, `fullstack` declares a model and API; `counter`, `particles` and `project` remain available. Refuses to overwrite a non-empty directory. An unknown name is a clear error. |
@@ -56,6 +62,7 @@ your shell and no npm packages are fetched.
 | `inspect <ir.json> [--select <id>] [--layers] [--json]` | Deterministic widget tree from a compiled IR: each node's id, kind, `component`/`key`, key props, computed `bounds` and `subtree` bounds, and visible-only `when`/`unless` conditions. Bounds come from `opurom-render --a11y` (never computed here). `--select <id>` prints just that node's ancestor path plus its subtree; `--layers` adds per-node effect layers and the frame-wide dirty-rect status; `--json` prints the same view with a stable key order. Unknown ids and a missing IR are clear errors. Never mutates the IR file. |
 | `test` | End-to-end pipeline assertions (`node:assert`). Reports `PASS` / `FAIL` / `SKIP` per check and exits 1 on any failure. |
 | `examples` | Lists the apps registered in `opurom-examples/examples.json`: name, source, test count and whether the source is present, plus the app/test totals. |
+| `test --report [--out <dir>] [--latest]` | Builds and archives a deterministic `opurom.test-report/v1` JSON report: source-provenance rows for unit/component/integration/gesture/pixel/performance gates, pinned Flutter 3.50 gesture and pixel thresholds, commit/branch tags, and PASS/FAIL/N/A counts. `--out` selects an archive directory; `--latest` prints the most recent archive. A real FAIL exits 1; a declared N/A never masquerades as PASS. |
 | `test --examples [--filter <name>] [--jobs N] [--verbose]` | Runs the registered example tests ctest-style: one `PASS` / `FAIL` / `SKIP` line per test, then `tests passed: X, failed: Y, skipped: Z, time N.Ns` and the failed test ids; exits 1 on any failure. Tests of one app run in registry order (render consumes the IR its compile test wrote); apps run in parallel, `--jobs` defaults to min(4, cpus). A missing source marked `required: false` is a SKIP with the reason; a missing `required: true` source is a FAIL. Commands use `{source}` / `{tmp}` placeholders and the `opuromc`, `opurom-render`, `node` tool aliases, so no machine-specific paths are stored in the registry. |
 
 ```sh
@@ -109,7 +116,8 @@ buttons, `dashboard` adds themed summary widgets, `fullstack` declares a persist
 model and HTTP API, `particles` exercises the seeded particle field, and `project`
 uses imported modules. Each template writes a distinct compiling `.opu` entry.
 Generated files are deterministic and byte-identical across two runs with the same
-project name. The unit suite runs a real `opuromc check` subprocess for every
+project name. Scaffolded `opurom.json` includes an `environments` map with `dev`, `test` and `prod`
+ready for per-environment defines. The unit suite runs a real `opuromc check` subprocess for every
 template; when the compiler executable is absent, that check records a skip with
 its binary lookup reason. Every scaffold references the embedded `logo.png` in its
 README and favicon files.
@@ -738,9 +746,23 @@ node bin/opurom.mjs dev --src app.opu --kernel ./opurom-kernel   # runtime kerne
 curl -s http://127.0.0.1:5178/api/inspect/frames?since=0
 curl -s http://127.0.0.1:5178/api/inspect/memory
 curl -s http://127.0.0.1:5178/api/inspect/network
+node bin/opurom.mjs devtools                           # session discovery (devtools.serve parity)
+curl -s http://127.0.0.1:5178/api/devtools/session
+curl -s 'http://127.0.0.1:5178/api/logs?level=warn&q=reload&format=text'
+curl -s -X POST http://127.0.0.1:5178/api/devtools/exit  # stop this dev session
 ```
 
-The SSE stream also emits `event: frame|memory|network` frames with the same
+The session record exposes the three data-plane URLs plus the live IR, SSE
+events, logs, session-exit endpoint, inspector bundle availability and the
+sibling DAP adapter path. Flutter authority at 3.50-candidate.0:
+`packages/flutter_tools/lib/src/commands/daemon.dart:1636-1660` (`devtools.serve`),
+`devtools_launcher.dart:39-95`, `resident_runner.dart:2012-2043,2090-2098`,
+`foundation/service_extensions.dart:30-37` and `foundation/binding.dart:1008-1010` (`exit`).
+
+The log ring keeps the last 500 records per session with trace/info/warn/error levels
+(Flutter `logger.dart:29-64,68-260`); `level`, `source`, `q`, `since` and `limit` filters
+are deterministic, and `format=json|ndjson|text` exports the filtered view without
+fabricating entries.
 records. Every response carries `availability: full|partial|absent` and a
 `reason`; a channel with no source is `absent`, never a fabricated `0`, and
 absent mirrors inside a record stay `null`. A hot reload resets the three rings
@@ -1186,8 +1208,9 @@ it. Other command output formats are unchanged.
   data-only and read-only: it parses the IR without writing to it and reports the
   renderer's layer and a11y trees.
 - **The CLI covers its own toolchain**: arg parsing, path/tool discovery, lazy cargo builds,
-  offline-first generated-service builds, `doctor`, `targets`, `init`, `check`, `build`,
-  `serve`, `migrate`, `dev`, `bench`, `profile`, `inspect`, `size` and `test`. GPU effect
+  offline-first generated-service builds, `doctor`, `config`, `targets`, `init`, `check`, `build`,
+  `serve`, `migrate`, `dev`, `devtools`, `bench`, `profile`, `inspect`, `size` and `test`, plus global multi-environment
+  defines (`--env`, `--mode`, `--dart-define`, `--dart-define-from-file`). GPU effect
   kernels, GPU presentation and Vulkan/ANGLE/D3D are the responsibility of `opurom-gpu` and
   `opurom-render`.
 
@@ -1197,6 +1220,8 @@ it. Other command output formats are unchanged.
 bin/opurom.mjs        dispatcher (shebang, executable)
 bin/sync-hub.mjs      standalone loopback RFC 6455 sync hub helper
 lib/args.mjs          parseArgs / requireFlags / parsePort / flagEnabled
+lib/config.mjs        Flutter-style settings, XDG path, .env/JSON defines, build info
+lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
 lib/targets.mjs       8 emitters + built-in target parsing + build-target validation
 lib/proc.mjs          spawnSync wrappers
@@ -1232,7 +1257,11 @@ test/bench-json.test.mjs  real-process JSON report tests (8)
 test/bench_suite.test.mjs  suite bounds, integer stats, schemas, SKIP/PARTIAL and real run (10)
 test/frame_profile.test.mjs  injected samples, schema, validation and real renderer (11)
 test/doctor.test.mjs   toolchain report tests (3)
+test/config.test.mjs   settings, .env/JSON merge order, build modes and CLI flags (9)
+test/devtools-session.test.mjs  DevTools session discovery and CLI (3)
+test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
+test/logs_cli.test.mjs  saved-log filters, export and validation (2)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (196 tests)
+test/*.test.mjs       node:test unit suite (282 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```

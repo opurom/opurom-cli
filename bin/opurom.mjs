@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { flagEnabled, parseArgs, parsePort, requireFlags } from '../lib/args.mjs';
+import {
+  buildEnvironmentArgs, buildInfoFor, configCommand, createLogRing, environmentProcessEnv,
+  parseCliDefines, parseLogLevel, resolveEnvironment,
+} from '../lib/config.mjs';
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
@@ -14,12 +19,14 @@ import { benchSuite } from '../lib/bench_suite.mjs';
 import { inspect, machineReport, profile } from '../lib/async_runtime.mjs';
 import { MAX_FRAMES as FRAME_PROFILE_MAX_FRAMES, profileFrames } from '../lib/frame_profile.mjs';
 import { inspectTree } from '../lib/inspect_tree.mjs';
-import { inspectDevDigest, inspectDevState, inspectDevTree } from '../lib/inspect_dev.mjs';
+import { inspectDevDigest, inspectDevState, inspectDevTree, inspectDevtools } from '../lib/inspect_dev.mjs';
 import { sizeReport } from '../lib/minify.mjs';
 import { compareBackends, profileRepeat } from '../lib/profile.mjs';
 import { DEFAULT_SYNC_PORT, verifySync } from '../lib/sync.mjs';
 import { examplesList, runExampleTests } from '../lib/examples.mjs';
 import { discoverScripts, runWidgetTests } from '../lib/widget_test.mjs';
+import { archiveReport, buildReport, latestReport, readArchivedReport, reportJson } from '../lib/test_report.mjs';
+import { workspaceRoot } from '../lib/paths.mjs';
 
 const USAGE = `opurom — Opurom toolchain CLI (zero npm dependencies)
 
@@ -27,6 +34,11 @@ Usage: node bin/opurom.mjs <command> [options]
 
 Commands:
   doctor                          check rustc/cargo/node/opuromc/render/gpu
+  config [--list] [--machine] [--key value ...]
+                                  read/write global settings (empty value removes)
+  logs [<file>...] [--level trace|info|warn|error] [--source <s>] [--q <text>]
+       [--format json|ndjson|text] [--out <file>]
+                                  read/export dev log exports or saved log files
   targets                         list the IR emitters
   init --list
                                   list starter templates
@@ -77,6 +89,8 @@ Commands:
                                   (default :5178): state snapshot + recent
                                   events, --tree for the live IR widget tree,
                                   --digest for the golden digest + node diff
+  devtools [<url>] [--json]       show DevTools session discovery from a running
+                                  "opurom dev" server (default :5178)
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [-j N] [--verbose] [--fail-fast]
@@ -84,9 +98,21 @@ Commands:
   test --widget <file|dir> [--verbose] [--fail-fast] [--update-goldens]
                                   run interaction-test scripts (.wtest.json);
                                   --update-goldens rewrites only changed digests
+  test --report [--out <dir>] [--latest]
+                                  build and archive a deterministic test report;
+                                  --latest prints the most recent archived report
                                   run interaction-test scripts (.wtest.json)
 
-Run "node bin/opurom.mjs <command> --help" for the same summary.`;
+Run "node bin/opurom.mjs <command> --help" for the same summary.
+
+Global build options (check/build/dev/serve):
+  --env <name>                    select a configured environment (default/dev/test/prod)
+  --mode <debug|profile|release>  build mode (Flutter BuildMode parity, default debug)
+  --dart-define KEY=VALUE         compile-time value; repeats allowed, highest precedence
+  --dart-define-from-file <file>  JSON or .env value file; repeats allowed, merged in order
+
+Settings are stored under $OPUR_CONFIG or $XDG_CONFIG_HOME/opurom; project
+overrides live in <project>/.opurom/settings.json.`;
 
 function buildSource(flags) {
   if (flags.project !== undefined) {
@@ -99,6 +125,42 @@ function buildSource(flags) {
 async function main(argv) {
   const { flags, positionals } = parseArgs(argv);
   const command = positionals[0];
+  const cwd = process.cwd();
+  const configOptions = {};
+  const reserved = new Set([
+    'src', 'project', 'out', 'target', 'port', 'template', 'list', 'machine', 'help',
+    'env', 'mode', 'dart-define', 'dart-define-from-file', 'json', 'markdown', 'full',
+    'compare', 'suite', 'runs', 'frames', 'repeat', 'degrade', 'select', 'layers', 'tree',
+    'digest', 'dev', 'widget', 'examples', 'filter', 'jobs', 'concurrency', 'verbose',
+    'fail-fast', 'update-goldens', 'optimize', 'minify', 'tree-shake', 'sourcemap',
+    'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
+    'level', 'source', 'q', 'format', 'since', 'limit',
+  ]);
+  for (const [key, value] of Object.entries(flags)) {
+    if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
+  }
+  const environment = command && ['check', 'build', 'dev', 'serve'].includes(command)
+    ? resolveEnvironment({
+      cwd,
+      envName: typeof flags.env === 'string' ? flags.env : undefined,
+      dartDefine: flags['dart-define'],
+      defineFromFile: flags['dart-define-from-file'],
+    })
+    : null;
+  const buildInfo = environment && command !== 'serve'
+    ? buildInfoFor({
+      mode: flags.mode,
+      target: command === 'build' && typeof flags.target === 'string' ? flags.target : null,
+      environment,
+    })
+    : null;
+  const runtimeEnv = environment ? environmentProcessEnv(environment) : process.env;
+  if (environment) {
+    for (const key of ['--env', '--mode']) {
+      const flag = key.slice(2);
+      if (flags[flag] === true) throw new Error(`missing required value for ${key}`);
+    }
+  }
   if (!command || flags.help || command === 'help') {
     console.log(USAGE);
     return 0;
@@ -107,6 +169,58 @@ async function main(argv) {
   switch (command) {
     case 'doctor':
       return runDoctor();
+    case 'logs': {
+      const format = typeof flags.format === 'string' ? flags.format : 'text';
+      const level = parseLogLevel(flags.level ?? undefined);
+      const source = typeof flags.source === 'string' ? flags.source : undefined;
+      const q = typeof flags.q === 'string' ? flags.q : '';
+      const since = flags.since === undefined ? 0 : Number(flags.since);
+      const limit = flags.limit === undefined ? undefined : Number(flags.limit);
+      if (!Number.isInteger(since) || since < 0) throw new Error(`invalid --since: ${flags.since}`);
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) throw new Error(`invalid --limit: ${flags.limit}`);
+      const ring = createLogRing();
+      const files = positionals.slice(1);
+      if (files.length === 0) {
+        const view = await (await fetch('http://127.0.0.1:5178/api/logs')).text();
+        console.log(view.trimEnd());
+        return 0;
+      }
+      for (const file of files) {
+        const lines = readFileSync(file, 'utf8').split(/\r?\n/);
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          let row;
+          try {
+            row = JSON.parse(line);
+          } catch {
+            row = { level: 'info', source: 'file', message: line };
+          }
+          ring.add(row.level ?? 'info', row.message ?? String(row), {
+            source: row.source ?? path.basename(file),
+          });
+        }
+      }
+      const output = ring.export({ format, level, source, q, since, limit });
+      if (typeof flags.out === 'string') {
+        const fs = await import('node:fs');
+        fs.writeFileSync(flags.out, output);
+        console.log(`logs exported: ${flags.out}`);
+      } else {
+        process.stdout.write(output);
+      }
+      return 0;
+    }
+    case 'config': {
+      if (positionals[1]) throw new Error(`unexpected argument: ${positionals[1]}`);
+      const { code } = configCommand({
+        options: configOptions,
+        list: flagEnabled(flags, 'list'),
+        machine: flagEnabled(flags, 'machine'),
+        cwd,
+        log: console.log,
+      });
+      return code;
+    }
     case 'targets':
       for (const name of targetsFromBuiltins()) console.log(name);
       return 0;
@@ -126,8 +240,9 @@ async function main(argv) {
     case 'check': {
       const src = positionals[1] ?? flags.src;
       if (!src) throw new Error('usage: check <src.opu>');
-      check(src);
+      check(src, { env: runtimeEnv, environment, buildInfo });
       console.log(`check ok: ${path.resolve(src)}`);
+      for (const entry of environment.entries) console.log(`  define: ${entry}`);
       return 0;
     }
     case 'build': {
@@ -139,14 +254,14 @@ async function main(argv) {
       const treeShake = flagEnabled(flags, 'tree-shake');
       const sourcemap = flagEnabled(flags, 'sourcemap');
       if (target === 'full') {
-        buildFull({ src, out, optimize, minify, treeShake, sourcemap });
+        buildFull({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
         return 0;
       }
       if (target === 'wasm') {
-        buildWasm({ src, out, optimize, minify, treeShake, sourcemap });
+        buildWasm({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
         return 0;
       }
-      build({ src, target, out, optimize, minify, treeShake, sourcemap });
+      build({ src, target, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
       return 0;
     }
     case 'verify': {
@@ -164,7 +279,7 @@ async function main(argv) {
     case 'serve': {
       const { out } = requireFlags(flags, ['out']);
       const port = parsePort(flags.port, 8787);
-      await serve({ out, port });
+      await serve({ out, port, env: runtimeEnv });
       return 0; // the service keeps the process alive
     }
     case 'migrate': {
@@ -189,6 +304,7 @@ async function main(argv) {
         android: flagEnabled(flags, 'android') ? { serial: typeof flags.device === 'string' ? flags.device : undefined } : null,
         kernel: typeof flags.kernel === 'string' ? { binary: flags.kernel } : null,
         inspector: typeof flags.inspector === 'string' ? flags.inspector : undefined,
+        env: runtimeEnv, environment, buildInfo,
       });
       return 0; // the HTTP server keeps the process alive
     }
@@ -264,12 +380,39 @@ async function main(argv) {
         : (flags.select === true ? '' : String(flags.select));
       return inspectTree({ ir, select, layers: flagEnabled(flags, 'layers'), json: flagEnabled(flags, 'json') });
     }
+    case 'devtools': {
+      const url = positionals[1];
+      if (url && flags.tree) throw new Error('usage: devtools [<url>] [--json]');
+      return await inspectDevtools({ url, json: flagEnabled(flags, 'json') });
+    }
     case 'examples':
       await examplesList();
       return 0;
     case 'test': {
       const failFast = flagEnabled(flags, 'fail-fast');
       const updateGoldens = flagEnabled(flags, 'update-goldens');
+      if (flagEnabled(flags, 'report')) {
+        if (flags.widget !== undefined || flagEnabled(flags, 'examples')
+            || flags['fail-fast'] !== undefined || flags['update-goldens'] !== undefined) {
+          throw new Error('usage: --report is standalone; run tests first, then archive');
+        }
+        if (flagEnabled(flags, 'latest')) {
+          const dir = typeof flags.out === 'string' ? path.resolve(flags.out) : undefined;
+          const file = latestReport(workspaceRoot(), dir);
+          if (!file) throw new Error('no archived test report found');
+          const archived = readArchivedReport(file);
+          process.stdout.write(reportJson(archived));
+          return archived.summary.FAIL ? 1 : 0;
+        }
+        const report = buildReport({ root: workspaceRoot() });
+        const file = archiveReport(report, {
+          root: workspaceRoot(),
+          dir: typeof flags.out === 'string' ? path.resolve(flags.out) : undefined,
+        });
+        process.stdout.write(reportJson(report));
+        process.stderr.write(`archived ${file}\n`);
+        return report.summary.FAIL ? 1 : 0;
+      }
       if (updateGoldens && flags.widget === undefined) {
         throw new Error('usage: --update-goldens requires --widget (it rewrites .wtest.json digests)');
       }
