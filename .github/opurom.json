@@ -25,6 +25,7 @@
     "contract-schema-consistency",
     "deterministic-evidence-contract",
     "gate-replay-stability",
-    "evidence-bounds-contract"
+    "evidence-bounds-contract",
+    "component-motion-recipe-contract"
   ]
 }

@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [rust-test, rust-fmt, node-test, node-syntax, validate, coverage-gate, performance-phase-contract, test-scheduling-contract, golden-failure-contract, gesture-timing-contract, cross-target-artifact-contract, fuzz-input-corpus-contract, stability-resource-contract, report-archive-integrity-contract, contract-gate-verdict, ci-manifest-consistency-contract, gate-artifact-manifest, ci-self-healing-contract, flutter-provenance-contract, provenance-citation-consistency, contract-schema-consistency, deterministic-evidence-contract, gate-replay-stability, evidence-bounds-contract]
+        check: [rust-test, rust-fmt, node-test, node-syntax, validate, coverage-gate, performance-phase-contract, test-scheduling-contract, golden-failure-contract, gesture-timing-contract, cross-target-artifact-contract, fuzz-input-corpus-contract, stability-resource-contract, report-archive-integrity-contract, contract-gate-verdict, ci-manifest-consistency-contract, gate-artifact-manifest, ci-self-healing-contract, flutter-provenance-contract, provenance-citation-consistency, contract-schema-consistency, deterministic-evidence-contract, gate-replay-stability, evidence-bounds-contract, component-motion-recipe-contract]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -60,13 +60,16 @@ jobs:
                 git clone --depth 1 "https://github.com/opurom/${repo}.git" "$repo"
               done
               # Source/provenance gates in this matrix read cited Flutter
-              # file:line anchors; always provide the pinned authoritative
-              # framework tree so nested gates and the full node-test suite
-              # resolve the same source layout.
+              # file:line anchors and authoritative lowering sources from the
+              # render visual-gate branch; provide both trees so nested gates
+              # and the full node-test suite resolve the same source layout.
               git clone --filter=blob:none --no-checkout \
                 "https://github.com/flutter/flutter.git" flutter-golden
               git -C flutter-golden checkout --detach \
                 ab2912035e160d9cad6306df307576da6128ebdb
+              git -C opurom-render fetch --depth 1 origin render/visual-gate-contract
+              git -C opurom-render fetch --depth 1 origin render/component-recipe-contract
+              git -C opurom-render fetch --depth 1 origin render/motion-spec-contract
               ;;
             opurom-lang)
               for repo in opurom-render opurom-examples; do

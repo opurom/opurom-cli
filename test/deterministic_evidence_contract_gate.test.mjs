@@ -25,7 +25,7 @@ test('all contract gates emit deterministic evidence fields', () => {
   assert.equal(run.status, 0);
   assert.equal(run.json.schema, 'opurom.deterministic-evidence-contract/v1');
   assert.equal(run.json.status, 'PASS');
-  assert.equal(run.json.summary.total, 11);
+  assert.equal(run.json.summary.total, 12);
   assert.equal(run.json.summary.fail, 0);
   assert.ok(run.json.checks.every((row) => row.status === 'PASS'));
 });

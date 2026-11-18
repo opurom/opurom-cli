@@ -25,6 +25,7 @@ const GATES = Object.freeze([
   ['provenance-citation-consistency', 'opurom.provenance-citation-consistency/v1'],
   ['contract-schema-consistency', 'opurom.contract-schema-consistency/v1'],
   ['deterministic-evidence-contract', 'opurom.deterministic-evidence-contract/v1'],
+  ['component-motion-recipe-contract', 'opurom.component-motion-recipe-contract/v1'],
 ]);
 
 const gates = GATES.map(([name, schema]) => {

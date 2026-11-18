@@ -27,6 +27,21 @@ const CITATIONS = Object.freeze([
     needle: 'kVsync', label: 'FrameTimingsRecorder state order',
   },
   {
+    file: 'packages/flutter/lib/src/material/motion.dart', from: 28, to: 28,
+    needle: 'static const Duration short1 = Duration(milliseconds: 50)',
+    label: 'Material 3 short1 duration',
+  },
+  {
+    file: 'packages/flutter/lib/src/material/motion.dart', from: 60, to: 60,
+    needle: 'static const Duration medium1 = Duration(milliseconds: 250)',
+    label: 'Material 3 medium1 duration',
+  },
+  {
+    file: 'packages/flutter/lib/src/material/motion.dart', from: 192, to: 192,
+    needle: 'static const Curve standard = Cubic(0.2, 0.0, 0.0, 1.0)',
+    label: 'Material 3 standard easing',
+  },
+  {
     file: 'packages/flutter_test/lib/src/binding.dart', from: 1326, to: 1329,
     needle: '10 minutes for [AutomatedTestWidgetsFlutterBinding]',
     label: 'automated 10-minute timeout',

@@ -32,6 +32,7 @@ const GATES = Object.freeze([
   ['ci-self-healing-contract', 'opurom.ci-self-healing-contract/v1'],
   ['gate-replay-stability', 'opurom.gate-replay-stability/v1'],
   ['evidence-bounds-contract', 'opurom.evidence-bounds-contract/v1'],
+  ['component-motion-recipe-contract', 'opurom.component-motion-recipe-contract/v1'],
 ]);
 
 mkdirSync(OUT, { recursive: true });

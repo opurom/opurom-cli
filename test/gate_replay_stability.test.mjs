@@ -24,7 +24,7 @@ test('every module-eight gate is byte-stable across two replays', () => {
   assert.equal(run.json.schema, 'opurom.gate-replay-stability/v1');
   assert.equal(run.json.status, 'PASS');
   assert.equal(run.json.contract.runsPerGate, 2);
-  assert.equal(run.json.summary.total, 13);
+  assert.equal(run.json.summary.total, 14);
   assert.equal(run.json.summary.fail, 0);
   for (const gate of run.json.gates) {
     assert.equal(gate.status, 'PASS');

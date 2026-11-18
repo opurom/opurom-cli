@@ -25,6 +25,7 @@ const GATES = Object.freeze([
   'flutter-provenance-contract',
   'provenance-citation-consistency',
   'ci-self-healing-contract',
+  'component-motion-recipe-contract',
 ]);
 
 const FORBIDDEN_KEY = /\b(?:timestamp|generatedAt|createdAt|updatedAt|startedAt|completedAt|failedAt|duration|elapsed|random|nonce|uuid)\b/i;

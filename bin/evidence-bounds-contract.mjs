@@ -27,6 +27,7 @@ const GATES = Object.freeze([
   'ci-self-healing-contract',
   'contract-schema-consistency',
   'deterministic-evidence-contract',
+  'component-motion-recipe-contract',
 ]);
 
 function measure(value, depth = 0) {

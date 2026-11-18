@@ -26,7 +26,7 @@ test('all gate evidence stays within fixed structural bounds', () => {
   assert.equal(run.json.status, 'PASS');
   assert.equal(run.json.contract.maxBytes, 256 * 1024);
   assert.equal(run.json.contract.maxDepth, 12);
-  assert.equal(run.json.summary.total, 13);
+  assert.equal(run.json.summary.total, 14);
   assert.equal(run.json.summary.fail, 0);
   assert.ok(run.json.gates.every((gate) => gate.status === 'PASS' && gate.bytes > 0));
 });
