@@ -53,6 +53,8 @@ if (name === 'rust-test') {
   console.log((r.stdout || '').split('\n').slice(0, 40).join('\n'));
   console.log('run `cargo fmt --all` in this repository to apply the pinned toolchain formatting');
   process.exit(1);
+} else if (name === 'coverage-gate') {
+  run('node', ['bin/coverage.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }

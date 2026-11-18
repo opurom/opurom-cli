@@ -6,6 +6,7 @@
     "rust-fmt",
     "node-test",
     "node-syntax",
-    "validate"
+    "validate",
+    "coverage-gate"
   ]
 }
