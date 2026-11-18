@@ -115,3 +115,18 @@ test('the local repository golden set is intact', { skip: !existsSync(path.resol
   assert.equal(result.status, 'PASS', result.reason ?? '');
   assert.equal(result.rows.length, 22, '22 Flutter Gallery goldens must be pinned');
 });
+
+test('Flutter fraction and human percent thresholds agree at the boundary', () => {
+  // Flutter goldens.dart:178 compares a 0..1 diffPercent fraction; its error
+  // text prints that fraction * 100 (_goldens_io.dart:258-259). Both spellings
+  // must land on the same side of the gate.
+  const fraction = classifyPixelDiff({ diffPercent: 0.02, scriptClass: 'latin', sameFont: true });
+  const human = classifyPixelDiff({ diffPercent: 2, scriptClass: 'latin', sameFont: true });
+  assert.equal(fraction.status, human.status);
+  assert.equal(fraction.status, 'PASS');
+  // Opurom's published contract takes a human-readable percent (0..100);
+  // 0.0201% is below 2% and must pass. Flutter's own comparator receives the
+  // 0..1 fraction from ComparisonResult, which is not this public input.
+  const small = classifyPixelDiff({ diffPercent: 0.0201, scriptClass: 'latin', sameFont: true });
+  assert.equal(small.status, 'PASS');
+});
