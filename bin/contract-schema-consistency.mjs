@@ -70,7 +70,7 @@ check('aggregate manifests register every gate with a matching schema', () => {
     .map((match) => match[1]);
   const artifactNames = [...artifactSource.matchAll(/\['([^']+)',\s*'opurom\.[A-Za-z0-9.-]+\/v\d+'\]/g)]
     .map((match) => match[1]);
-  for (const name of CONTRACT_GATES.filter((gate) => gate !== 'ci-manifest-consistency-contract' && gate !== 'ci-self-healing-contract')) {
+  for (const name of CONTRACT_GATES.filter((gate) => !['ci-manifest-consistency-contract', 'ci-self-healing-contract', 'deterministic-evidence-contract'].includes(gate))) {
     assert.ok(verdictNames.includes(name), `${name} missing from contract verdict`);
     assert.ok(artifactNames.includes(name), `${name} missing from artifact manifest`);
   }

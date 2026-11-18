@@ -26,7 +26,7 @@ test('all module-eight contract schemas are stable v1 and registered', () => {
   assert.equal(run.json.schema, 'opurom.contract-schema-consistency/v1');
   assert.equal(run.json.status, 'PASS');
   assert.equal(run.json.contract.requiredVersion, 'v1');
-  assert.ok(run.json.contract.contractGates >= 11);
+  assert.ok(run.json.contract.contractGates >= 12);
   assert.equal(run.json.summary.fail, 0);
   assert.ok(Object.values(run.json.evidence).every((schema) => /\/v1$/.test(schema)));
 });

@@ -22,6 +22,7 @@
     "ci-self-healing-contract",
     "flutter-provenance-contract",
     "provenance-citation-consistency",
-    "contract-schema-consistency"
+    "contract-schema-consistency",
+    "deterministic-evidence-contract"
   ]
 }
