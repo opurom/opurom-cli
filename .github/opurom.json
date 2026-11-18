@@ -19,6 +19,7 @@
     "contract-gate-verdict",
     "ci-manifest-consistency-contract",
     "gate-artifact-manifest",
-    "ci-self-healing-contract"
+    "ci-self-healing-contract",
+    "flutter-provenance-contract"
   ]
 }
