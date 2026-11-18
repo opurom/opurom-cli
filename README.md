@@ -33,6 +33,7 @@ your shell and no npm packages are fetched.
 | `init --list` | Prints every starter template name, one per line, in stable alphabetical order. |
 | `init <dir> [--template <name>]` | Scaffolds `opurom.json` (name + targets), a starter screen, `README.md`, `.gitignore`, a 128x128 `logo.png`, its derived `favicon.ico` and an `index.html` favicon link. The image bytes are embedded in `lib/init.mjs`, so scaffolding needs no umbrella checkout. `blank` is a minimal screen, `dashboard` adds themed UI and interaction, `fullstack` declares a model and API; `counter`, `particles` and `project` remain available. Refuses to overwrite a non-empty directory. An unknown name is a clear error. |
 | `check <src.opu>` | Runs `opuromc check` and forwards diagnostics. |
+| `analyze [<dir>] [--machine] [--write <file>]` | Static quality gate over every `.opu` source under a directory (or one file). Runs the real `opuromc check` per file, prints one `[pass]`/`[error]` row per file, ends with the Flutter-style summary (`No issues found!` / `N issues found. analyzed N files (ran in Xs)`), and exits 1 when any file fails. `--machine` prints the `opurom.analyze/v1` JSON instead of the text, `--write` saves the same text to a file. Flutter authority: `packages/flutter_tools/lib/src/commands/analyze.dart:25-105`, `analyze_base.dart:66-122`, `validate_project.dart:16-100`. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build --project <dir> --target <name> --out <dir>` | Resolves `<dir>/main.opu` and its `import` declarations into one program, then runs the same compile-and-lower pipeline. Accepts every target and build flag from `--src`. Errors clearly when `main.opu` is absent. |
 | `build --src <src.opu> --target web-dom --out <dir>` | Responsive DOM build: the compiler delegates to the sibling `opurom-web` emitter, which writes a standalone `index.html` with a viewport meta tag and flex layout that reflows on browser resize. `web-dom` is a build target, not a 0.1.0 IR emitter, so `targets` and `opuromc targets` keep their existing lists. |
@@ -1208,7 +1209,7 @@ it. Other command output formats are unchanged.
   data-only and read-only: it parses the IR without writing to it and reports the
   renderer's layer and a11y trees.
 - **The CLI covers its own toolchain**: arg parsing, path/tool discovery, lazy cargo builds,
-  offline-first generated-service builds, `doctor`, `config`, `targets`, `init`, `check`, `build`,
+  offline-first generated-service builds, `doctor`, `config`, `targets`, `init`, `check`, `analyze`, `build`,
   `serve`, `migrate`, `dev`, `devtools`, `bench`, `profile`, `inspect`, `size` and `test`, plus global multi-environment
   defines (`--env`, `--mode`, `--dart-define`, `--dart-define-from-file`). GPU effect
   kernels, GPU presentation and Vulkan/ANGLE/D3D are the responsibility of `opurom-gpu` and
@@ -1221,6 +1222,7 @@ bin/opurom.mjs        dispatcher (shebang, executable)
 bin/sync-hub.mjs      standalone loopback RFC 6455 sync hub helper
 lib/args.mjs          parseArgs / requireFlags / parsePort / flagEnabled
 lib/config.mjs        Flutter-style settings, XDG path, .env/JSON defines, build info
+lib/analyze.mjs       project source discovery + per-file quality gate and reports
 lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
 lib/targets.mjs       8 emitters + built-in target parsing + build-target validation
@@ -1261,7 +1263,8 @@ test/config.test.mjs   settings, .env/JSON merge order, build modes and CLI flag
 test/devtools-session.test.mjs  DevTools session discovery and CLI (3)
 test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
 test/logs_cli.test.mjs  saved-log filters, export and validation (2)
+test/analyze.test.mjs  source discovery, per-file rows, machine output, exit codes (4)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (282 tests)
+test/*.test.mjs       node:test unit suite (285 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```

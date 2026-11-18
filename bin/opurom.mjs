@@ -7,6 +7,7 @@ import {
   parseCliDefines, parseLogLevel, resolveEnvironment,
 } from '../lib/config.mjs';
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
+import { analyze } from '../lib/analyze.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
@@ -45,6 +46,8 @@ Commands:
   init <dir> [--template <name>]
                                   scaffold a new project (project has multiple .opu files)
   check <src.opu>                 type-check a source file
+  analyze [<dir>] [--machine] [--write <file>]
+                                  static quality gate over the project sources
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
@@ -134,12 +137,12 @@ async function main(argv) {
     'digest', 'dev', 'widget', 'examples', 'filter', 'jobs', 'concurrency', 'verbose',
     'fail-fast', 'update-goldens', 'optimize', 'minify', 'tree-shake', 'sourcemap',
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
-    'level', 'source', 'q', 'format', 'since', 'limit',
+    'level', 'source', 'q', 'format', 'since', 'limit', 'write',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
   }
-  const environment = command && ['check', 'build', 'dev', 'serve'].includes(command)
+  const environment = command && ['check', 'analyze', 'build', 'dev', 'serve'].includes(command)
     ? resolveEnvironment({
       cwd,
       envName: typeof flags.env === 'string' ? flags.env : undefined,
@@ -244,6 +247,15 @@ async function main(argv) {
       console.log(`check ok: ${path.resolve(src)}`);
       for (const entry of environment.entries) console.log(`  define: ${entry}`);
       return 0;
+    }
+    case 'analyze': {
+      const target = positionals[1] ?? '.';
+      const result = analyze({
+        path: target, env: runtimeEnv, environment, buildInfo,
+        machine: flagEnabled(flags, 'machine') || flagEnabled(flags, 'json'),
+        write: typeof flags.write === 'string' ? flags.write : null,
+      });
+      return result.issues ? 1 : 0;
     }
     case 'build': {
       const src = buildSource(flags);
