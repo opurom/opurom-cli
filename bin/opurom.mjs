@@ -8,6 +8,7 @@ import {
 } from '../lib/config.mjs';
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { analyze } from '../lib/analyze.mjs';
+import { modePlan } from '../lib/build_mode.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
 import { runDoctor } from '../lib/doctor.mjs';
@@ -261,19 +262,27 @@ async function main(argv) {
       const src = buildSource(flags);
       const { target, out } = requireFlags(flags, ['target', 'out']);
       validateBuildTarget(target);
-      const optimize = flagEnabled(flags, 'optimize');
-      const minify = flagEnabled(flags, 'minify');
-      const treeShake = flagEnabled(flags, 'tree-shake');
-      const sourcemap = flagEnabled(flags, 'sourcemap');
+      const flagsByName = {
+        optimize: flags.optimize !== undefined,
+        minify: flags.minify !== undefined,
+        treeShake: flags['tree-shake'] !== undefined,
+        sourcemap: flags.sourcemap !== undefined,
+      };
+      const modeFlags = modePlan(buildInfo?.mode, flagsByName);
+      const optimize = modeFlags.optimize;
+      const minify = modeFlags.minify;
+      const treeShake = modeFlags.treeShake;
+      const sourcemap = modeFlags.sourcemap;
+      const modeContext = { ...modeFlags, out };
       if (target === 'full') {
-        buildFull({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
+        buildFull({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo, modeContext });
         return 0;
       }
       if (target === 'wasm') {
-        buildWasm({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
+        buildWasm({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo, modeContext });
         return 0;
       }
-      build({ src, target, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo });
+      build({ src, target, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo, modeContext });
       return 0;
     }
     case 'verify': {
@@ -451,6 +460,7 @@ async function main(argv) {
         const files = target.endsWith('.wtest.json') ? [target] : discoverScripts(target);
         if (files.length === 0) throw new Error(`no .wtest.json scripts found under ${target}`);
         const { exitCode } = runWidgetTests(files, {
+          log: console.log,
           verbose: flagEnabled(flags, 'verbose'), failFast, updateGoldens,
         });
         return exitCode;
