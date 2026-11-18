@@ -73,6 +73,8 @@ if (name === 'rust-test') {
   run('node', ['bin/report-archive-integrity-contract.mjs']);
 } else if (name === 'contract-gate-verdict') {
   run('node', ['bin/contract-gate-verdict.mjs']);
+} else if (name === 'ci-manifest-consistency-contract') {
+  run('node', ['bin/ci-manifest-consistency-contract.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }
