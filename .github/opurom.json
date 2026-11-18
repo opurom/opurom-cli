@@ -9,6 +9,7 @@
     "validate",
     "coverage-gate",
     "performance-phase-contract",
-    "test-scheduling-contract"
+    "test-scheduling-contract",
+    "golden-failure-contract"
   ]
 }

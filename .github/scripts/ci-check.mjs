@@ -59,6 +59,8 @@ if (name === 'rust-test') {
   run('node', ['bin/performance-phase-contract.mjs']);
 } else if (name === 'test-scheduling-contract') {
   run('node', ['bin/test-scheduling-contract.mjs']);
+} else if (name === 'golden-failure-contract') {
+  run('node', ['bin/golden-failure-contract.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }
