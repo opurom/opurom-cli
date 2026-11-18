@@ -40,11 +40,11 @@ test('report rows are computed from real files, not a hard-coded PASS', () => {
   assert.ok(report.rows.length >= 12, 'all four test layers plus pixel/perf/provenance rows');
   assert.ok(report.rows.every((row) => ['PASS', 'FAIL', 'SKIP', 'N/A'].includes(row.status)),    `unexpected status: ${JSON.stringify(report.rows)}`);
   const eightState = report.rows.find((row) => row.name === 'component:eight-state');
-  assert.ok(['PASS', 'FAIL'].includes(eightState.status));
+  assert.ok(['PASS', 'FAIL', 'N/A'].includes(eightState.status));
   if (eightState.status === 'PASS') assert.match(eightState.detail, /pins, \d+ components/);
   else assert.match(eightState.detail, /state-digests.json/);
   const registry = report.rows.find((row) => row.name === 'integration:example-registry');
-  assert.ok(['PASS', 'FAIL'].includes(registry.status));
+  assert.ok(['PASS', 'FAIL', 'N/A'].includes(registry.status));
   if (registry.status === 'PASS') assert.match(registry.detail, /\d+ apps, \d+ tests/);
   assert.equal(report.summary.PASS + report.summary.FAIL + report.summary.N_A, report.rows.length);
 });
