@@ -60,9 +60,33 @@ check('workflow matrix, dispatcher and opurom.json declare identical check sets'
 check('every gate check has a runnable implementation', () => {
   for (const name of manifest.checks ?? []) {
     if (!name.endsWith('contract') && name !== 'contract-gate-verdict') continue;
-    const entry = name === 'contract-gate-verdict' ? name : name;
-    assert.ok(dispatcher.includes(`run('node', ['bin/${entry}.mjs'])`),
+    assert.ok(dispatcher.includes(`run('node', ['bin/${name}.mjs'])`),
       `${name} is not dispatched to a bin entry`);
+  }
+});
+
+const CONTRACT_GATES = [
+  ['performance-phase-contract', 'opurom.performance-phase-contract/v1'],
+  ['test-scheduling-contract', 'opurom.test-scheduling-contract/v1'],
+  ['golden-failure-contract', 'opurom.golden-failure-contract/v1'],
+  ['gesture-timing-contract', 'opurom.gesture-timing-contract/v1'],
+  ['cross-target-artifact-contract', 'opurom.cross-target-artifact-contract/v1'],
+  ['fuzz-input-corpus-contract', 'opurom.fuzz-input-corpus-contract/v1'],
+  ['stability-resource-contract', 'opurom.stability-resource-contract/v1'],
+  ['report-archive-integrity-contract', 'opurom.report-archive-integrity-contract/v1'],
+  ['flutter-provenance-contract', 'opurom.flutter-provenance-contract/v1'],
+];
+const ARTIFACT_GATES = [...CONTRACT_GATES.map(([name]) => name), 'contract-gate-verdict', 'ci-manifest-consistency-contract'];
+
+check('verdict and artifact manifest contain every registered contract gate', () => {
+  for (const [name, schema] of CONTRACT_GATES) {
+    assert.ok(manifest.checks.includes(name), `${name} missing from manifest`);
+    assert.ok(dispatcher.includes(`run('node', ['bin/${name}.mjs'])`), `${name} missing dispatcher`);
+    assert.ok(workflow.includes(name), `${name} missing workflow matrix`);
+    assert.ok(schema.startsWith('opurom.'), `${name} has invalid schema ${schema}`);
+  }
+  for (const name of ARTIFACT_GATES) {
+    assert.ok(manifest.checks.includes(name), `${name} missing from artifact manifest scope`);
   }
 });
 

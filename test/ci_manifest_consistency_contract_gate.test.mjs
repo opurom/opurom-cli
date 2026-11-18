@@ -33,7 +33,7 @@ test('the CI manifest gate emits a passing machine-readable report', () => {
   assert.equal(run.json.status, 'PASS');
   assert.equal(run.json.flutter.version, '3.50.0');
   assert.deepEqual(run.json.evidence.matrix, run.json.evidence.manifestChecks);
-  assert.equal(run.json.summary.total, 4);
+  assert.equal(run.json.summary.total, 5);
   assert.equal(run.json.summary.fail, 0);
   assert.ok(run.json.checks.every((row) => row.status === 'PASS'));
 });
