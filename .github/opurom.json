@@ -13,6 +13,7 @@
     "golden-failure-contract",
     "gesture-timing-contract",
     "cross-target-artifact-contract",
-    "fuzz-input-corpus-contract"
+    "fuzz-input-corpus-contract",
+    "stability-resource-contract"
   ]
 }
