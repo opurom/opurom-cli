@@ -59,6 +59,7 @@ Commands:
                                   static quality gate over the project sources
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
                                   [--timings] [--timings-file <file>]
+                                  [--incremental]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target web-dom --out <dir>
@@ -155,7 +156,7 @@ async function main(argv) {
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
     'level', 'source', 'q', 'format', 'since', 'limit', 'write', 'panels',
     'baseline', 'current', 'threshold', 'key', 'index', 'dev',
-    'timings', 'timings-file',
+    'timings', 'timings-file', 'incremental',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
@@ -330,6 +331,7 @@ async function main(argv) {
         env: runtimeEnv, environment, buildInfo, modeContext,
         timings: flagEnabled(flags, 'timings'),
         timingsFile: typeof flags['timings-file'] === 'string' ? flags['timings-file'] : null,
+        incremental: flagEnabled(flags, 'incremental'),
       });
       return 0;
     }

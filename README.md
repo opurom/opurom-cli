@@ -39,6 +39,7 @@ your shell and no npm packages are fetched.
 | `analyze [<dir>] [--machine] [--write <file>]` | Static quality gate over every `.opu` source under a directory (or one file). Runs the real `opuromc check` per file, prints one `[pass]`/`[error]` row per file, ends with the Flutter-style summary (`No issues found!` / `N issues found. analyzed N files (ran in Xs)`), and exits 1 when any file fails. `--machine` prints the `opurom.analyze/v1` JSON instead of the text, `--write` saves the same text to a file. Flutter authority: `packages/flutter_tools/lib/src/commands/analyze.dart:25-105`, `analyze_base.dart:66-122`, `validate_project.dart:16-100`. |
 | `build --src <src.opu> --target <name> --out <dir>` | `opuromc compile` to a temp IR, then `opuromc target <ir> --target <name> -o <out>`; `native` additionally runs `cargo build --release` inside `<out>`. Prints a concise summary; nonzero on failure. |
 | `build ... [--timings] [--timings-file <file>]` | Emits measured per-step build timings (`opurom.build-timings/v1`) on stdout and optionally to a JSON artifact. Each step records target, elapsed milliseconds, skipped and succeeded, mirroring Flutter `PerformanceMeasurement` (`build_system.dart:923,1016,1045-1057`); no number is inferred. |
+| `build ... [--incremental]` | Records source file marks in `.opurom-filecache.json` and reports dirty inputs using Flutter `FileStore` semantics (hash strategy, versioned cache, missing files dirty: `file_store.dart:65-83,88-110,162-230`). Artifacts stay byte-identical; the cache is an input-tracking artifact, not a runtime interpreter. |
 | `build --project <dir> --target <name> --out <dir>` | Resolves `<dir>/main.opu` and its `import` declarations into one program, then runs the same compile-and-lower pipeline. Accepts every target and build flag from `--src`. Errors clearly when `main.opu` is absent. |
 | `build --src <src.opu> --target web-dom --out <dir>` | Responsive DOM build: the compiler delegates to the sibling `opurom-web` emitter, which writes a standalone `index.html` with a viewport meta tag and flex layout that reflows on browser resize. `web-dom` is a build target, not a 0.1.0 IR emitter, so `targets` and `opuromc targets` keep their existing lists. |
 | `build --src <src.opu> --target <name> --out <dir> --optimize` | Runs `opuromc optimize <ir> -o <optimized-ir>` before every emitter, prints measured input/output byte sizes and falls back to the original IR with an explicit message if the compiler cannot optimize. Default builds are unchanged. |
@@ -1238,6 +1239,7 @@ lib/performance_profile.mjs measured frame-phase profiles and flame text
 lib/perf_compare.mjs baseline/current performance score comparison
 lib/plugin_market.mjs plugin manifest schema, SemVer ranges, offline index
 lib/build_timings.mjs measured per-step build timing records
+lib/file_store.mjs versioned hash/timestamp input cache
 lib/analyze.mjs       project source discovery + per-file quality gate and reports
 lib/log_buffer.mjs    bounded dev log ring, level/source/text filters, exports
 lib/paths.mjs         sibling paths, PATH lookup, lazy cargo builds
@@ -1282,10 +1284,11 @@ test/performance_profile.test.mjs  measured phases, nearest-rank p95 and flame t
 test/perf_compare.test.mjs  score keys, regression gate, N/A and CLI artifacts (6)
 test/plugin_market.test.mjs  manifest schema, ranges, offline resolution and CLI (5)
 test/build_timings.test.mjs  timer contract, JSON artifact and real build (4)
+test/file_store.test.mjs  hash/timestamp marks, invalid cache, real incremental build (3)
 test/log_buffer.test.mjs  log levels, bounded ring and exports (4)
 test/logs_cli.test.mjs  saved-log filters, export and validation (2)
 test/analyze.test.mjs  source discovery, per-file rows, machine output, exit codes (4)
 test/project.test.mjs project entry, imports and scaffold build tests (5)
-test/*.test.mjs       node:test unit suite (309 tests)
+test/*.test.mjs       node:test unit suite (312 tests)
 test/inspect_tree.test.mjs  widget tree, selection, layers and stable JSON schema (7)
 ```
