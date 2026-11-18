@@ -75,6 +75,10 @@ const CONTRACT_GATES = [
   ['stability-resource-contract', 'opurom.stability-resource-contract/v1'],
   ['report-archive-integrity-contract', 'opurom.report-archive-integrity-contract/v1'],
   ['flutter-provenance-contract', 'opurom.flutter-provenance-contract/v1'],
+  ['provenance-citation-consistency', 'opurom.provenance-citation-consistency/v1'],
+  ['contract-schema-consistency', 'opurom.contract-schema-consistency/v1'],
+  ['deterministic-evidence-contract', 'opurom.deterministic-evidence-contract/v1'],
+  ['ci-self-healing-contract', 'opurom.ci-self-healing-contract/v1'],
 ];
 const ARTIFACT_GATES = [...CONTRACT_GATES.map(([name]) => name), 'contract-gate-verdict', 'ci-manifest-consistency-contract'];
 
