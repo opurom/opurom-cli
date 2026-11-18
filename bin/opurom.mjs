@@ -58,6 +58,7 @@ Commands:
   analyze [<dir>] [--machine] [--write <file>]
                                   static quality gate over the project sources
   build --src <src.opu> --target <name> --out <dir> [--optimize] [--minify] [--tree-shake] [--sourcemap]
+                                  [--timings] [--timings-file <file>]
                                   compile IR and lower to a target
                                   (name: emitter, "full" or "wasm")
   build --src <src.opu> --target web-dom --out <dir>
@@ -154,6 +155,7 @@ async function main(argv) {
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
     'level', 'source', 'q', 'format', 'since', 'limit', 'write', 'panels',
     'baseline', 'current', 'threshold', 'key', 'index', 'dev',
+    'timings', 'timings-file',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
@@ -323,7 +325,12 @@ async function main(argv) {
         buildWasm({ src, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo, modeContext });
         return 0;
       }
-      build({ src, target, out, optimize, minify, treeShake, sourcemap, env: runtimeEnv, environment, buildInfo, modeContext });
+      build({
+        src, target, out, optimize, minify, treeShake, sourcemap,
+        env: runtimeEnv, environment, buildInfo, modeContext,
+        timings: flagEnabled(flags, 'timings'),
+        timingsFile: typeof flags['timings-file'] === 'string' ? flags['timings-file'] : null,
+      });
       return 0;
     }
     case 'verify': {
