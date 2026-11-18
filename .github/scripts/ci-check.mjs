@@ -93,6 +93,8 @@ if (name === 'rust-test') {
   run('node', ['bin/evidence-bounds-contract.mjs']);
 } else if (name === 'component-motion-recipe-contract') {
   run('node', ['bin/component-motion-recipe-contract.mjs']);
+} else if (name === 'effects-aaa-cross-target-contract') {
+  run('node', ['bin/effects-aaa-cross-target-contract.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }

@@ -26,6 +26,7 @@ const GATES = Object.freeze([
   'provenance-citation-consistency',
   'ci-self-healing-contract',
   'component-motion-recipe-contract',
+  'effects-aaa-cross-target-contract',
 ]);
 
 const FORBIDDEN_KEY = /\b(?:timestamp|generatedAt|createdAt|updatedAt|startedAt|completedAt|failedAt|duration|elapsed|random|nonce|uuid)\b/i;

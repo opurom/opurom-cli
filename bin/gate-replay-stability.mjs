@@ -26,6 +26,7 @@ const GATES = Object.freeze([
   'contract-schema-consistency',
   'deterministic-evidence-contract',
   'component-motion-recipe-contract',
+  'effects-aaa-cross-target-contract',
 ]);
 
 function runGate(name) {

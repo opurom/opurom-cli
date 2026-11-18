@@ -83,6 +83,7 @@ const CONTRACT_GATES = [
   ['deterministic-evidence-contract', 'opurom.deterministic-evidence-contract/v1'],
   ['ci-self-healing-contract', 'opurom.ci-self-healing-contract/v1'],
   ['component-motion-recipe-contract', 'opurom.component-motion-recipe-contract/v1'],
+  ['effects-aaa-cross-target-contract', 'opurom.effects-aaa-cross-target-contract/v1'],
 ];
 const ARTIFACT_GATES = [...CONTRACT_GATES.map(([name]) => name), 'contract-gate-verdict', 'ci-manifest-consistency-contract'];
 
