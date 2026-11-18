@@ -18,6 +18,7 @@
     "report-archive-integrity-contract",
     "contract-gate-verdict",
     "ci-manifest-consistency-contract",
-    "gate-artifact-manifest"
+    "gate-artifact-manifest",
+    "ci-self-healing-contract"
   ]
 }

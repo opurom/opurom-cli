@@ -77,6 +77,8 @@ if (name === 'rust-test') {
   run('node', ['bin/ci-manifest-consistency-contract.mjs']);
 } else if (name === 'gate-artifact-manifest') {
   run('node', ['bin/gate-artifact-manifest.mjs']);
+} else if (name === 'ci-self-healing-contract') {
+  run('node', ['bin/ci-self-healing-contract.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }
