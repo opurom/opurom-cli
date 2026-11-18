@@ -7,6 +7,7 @@
     "node-test",
     "node-syntax",
     "validate",
-    "coverage-gate"
+    "coverage-gate",
+    "performance-phase-contract"
   ]
 }

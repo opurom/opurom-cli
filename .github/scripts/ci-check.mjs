@@ -55,6 +55,8 @@ if (name === 'rust-test') {
   process.exit(1);
 } else if (name === 'coverage-gate') {
   run('node', ['bin/coverage.mjs']);
+} else if (name === 'performance-phase-contract') {
+  run('node', ['bin/performance-phase-contract.mjs']);
 } else if (name === 'node-test') {
   const pkg = join(ROOT, 'package.json');
   if (!existsSync(pkg)) { console.log('node-test: SKIP (no package.json)'); process.exit(0); }
