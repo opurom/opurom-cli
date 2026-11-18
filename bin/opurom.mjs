@@ -9,6 +9,7 @@ import {
 import { build, buildFull, buildWasm, check, migrate, projectMain } from '../lib/build.mjs';
 import { analyze } from '../lib/analyze.mjs';
 import { pub } from '../lib/pub.mjs';
+import { perfCompare } from '../lib/perf_compare.mjs';
 import { modePlan } from '../lib/build_mode.mjs';
 import { verifyArtifactManifest } from '../lib/fullstack.mjs';
 import { dev } from '../lib/dev.mjs';
@@ -101,6 +102,9 @@ Commands:
                                   --panels, the frames/memory/network/logs views
   perf [<url>] [--json]           show the measured frame-phase flame graph
                                   from a running "opurom dev" server
+  perf compare --baseline <file> --current <file> [--threshold <pct>]
+               [--key <name>...] [--out <file>]
+                                  compare two numeric performance JSON reports
   examples                        list registered example apps and their tests
   test                            end-to-end golden pipeline checks
   test --examples [--filter <name>] [--jobs N] [-j N] [--verbose] [--fail-fast]
@@ -145,6 +149,7 @@ async function main(argv) {
     'fail-fast', 'update-goldens', 'optimize', 'minify', 'tree-shake', 'sourcemap',
     'device', 'android', 'kernel', 'inspector', 'sync', 'clients', 'targets',
     'level', 'source', 'q', 'format', 'since', 'limit', 'write', 'panels',
+    'baseline', 'current', 'threshold', 'key',
   ]);
   for (const [key, value] of Object.entries(flags)) {
     if (!reserved.has(key) && !key.startsWith('dart-define')) configOptions[key] = value;
@@ -421,6 +426,18 @@ async function main(argv) {
       });
     }
     case 'perf': {
+      if (positionals[1] === 'compare') {
+        const baselineFile = requireFlags(flags, ['baseline']).baseline;
+        const currentFile = requireFlags(flags, ['current']).current;
+        const threshold = flags.threshold === undefined ? undefined : Number(flags.threshold);
+        const keys = flags.key === undefined ? null
+          : Array.isArray(flags.key) ? flags.key : [flags.key];
+        const { exitCode } = perfCompare({
+          baselineFile, currentFile, out: typeof flags.out === 'string' ? flags.out : null,
+          maxRegressionPct: threshold, keys,
+        });
+        return exitCode;
+      }
       return await inspectPerformance({ url: positionals[1], json: flagEnabled(flags, 'json') });
     }
     case 'examples':
