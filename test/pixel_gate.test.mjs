@@ -93,14 +93,11 @@ test('golden files alone never count as a pixel test result', () => {
   assert.match(row.reason, /golden files alone are not a pixel test/);
 });
 
-test('the local repository golden set is intact', () => {
+test('the local repository golden set is intact', { skip: !existsSync(path.resolve(new URL('../../', import.meta.url).pathname, GOLDEN_MANIFEST)) }, () => {
   // CI checks out only opurom-cli; the golden images are deliberately kept in
-  // the local aggregate workspace. Preserve the exact manifest contract here
-  // and skip with the concrete reason when that workspace is absent.
+  // the local aggregate workspace. When they are present, verify the full
+  // 22-frame manifest byte for byte.
   const root = path.resolve(new URL('../../', import.meta.url).pathname);
-  if (!existsSync(path.join(root, GOLDEN_MANIFEST))) {
-    return t.skip('aggregate workspace with Flutter Gallery goldens is not checked out');
-  }
   const result = verifyGoldenManifest({ root });
   assert.equal(result.status, 'PASS', result.reason ?? '');
   assert.equal(result.rows.length, 22, '22 Flutter Gallery goldens must be pinned');
