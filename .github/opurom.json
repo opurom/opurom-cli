@@ -21,6 +21,7 @@
     "gate-artifact-manifest",
     "ci-self-healing-contract",
     "flutter-provenance-contract",
-    "provenance-citation-consistency"
+    "provenance-citation-consistency",
+    "contract-schema-consistency"
   ]
 }

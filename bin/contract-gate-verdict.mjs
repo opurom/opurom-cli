@@ -22,6 +22,7 @@ const GATES = Object.freeze([
   ['stability-resource-contract', 'opurom.stability-resource-contract/v1'],
   ['report-archive-integrity-contract', 'opurom.report-archive-integrity-contract/v1'],
   ['flutter-provenance-contract', 'opurom.flutter-provenance-contract/v1'],
+  ['provenance-citation-consistency', 'opurom.provenance-citation-consistency/v1'],
 ]);
 
 const gates = GATES.map(([name, schema]) => {

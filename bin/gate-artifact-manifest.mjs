@@ -27,6 +27,7 @@ const GATES = Object.freeze([
   ['ci-manifest-consistency-contract', 'opurom.ci-manifest-consistency-contract/v1'],
   ['flutter-provenance-contract', 'opurom.flutter-provenance-contract/v1'],
   ['provenance-citation-consistency', 'opurom.provenance-citation-consistency/v1'],
+  ['contract-schema-consistency', 'opurom.contract-schema-consistency/v1'],
 ]);
 
 mkdirSync(OUT, { recursive: true });
