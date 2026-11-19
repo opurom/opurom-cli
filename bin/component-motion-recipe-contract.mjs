@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RENDER_ROOT = path.resolve(ROOT, '..', 'opurom-render');
-const RENDER_REF = 'origin/render/visual-gate-contract';
+const RENDER_REF = 'origin/main';
 const RECIPES = [
   'AppBar', 'Card', 'Button', 'IconButton', 'Input', 'Switch',
   'Slider', 'ListItem', 'Tabs', 'Dialog', 'Badge', 'Progress',
